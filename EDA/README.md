@@ -1,29 +1,29 @@
 # Exploratory Data Analysis (EDA)
 
-This module generates correlation, similarity-divergence, and key-feature density reports for a selected dataset split (merged `train_old.csv` and `test_old.csv`). Outputs are organized under `output/EDA/<dataset_name>` so every dataset keeps its own report folder.
+This module generates correlation, similarity-divergence, and key-feature density reports for a selected dataset split (merged `train_old.csv` and `test_old.csv`). Outputs are organized under `output/EDA/` to keep artifacts in a single, predictable location.
 
 ## Usage
 
 Run the pipeline from the repository root:
 
 ```bash
-python -m EDA.main --data-root data/highD_ratio_20 --output-root output/EDA --dataset-name highD_ratio_20
+python -m EDA.main --data-root data/highD_ratio_20 --output-root output/EDA
 ```
 
 Key arguments:
 
 - `--data-root`: folder containing `train_old.csv` and `test_old.csv`.
-- `--dataset-name`: optional label used in logs/report titles (defaults to the name of `--data-root`).
-- `--output-root`: base directory where results are written (each dataset gets its own subfolder).
+- `--dataset-name`: optional label used in logs/report titles (defaults to `highD_ratio_20`).
+- `--output-root`: base directory where results are written (artifacts now sit directly under this path).
 - `--correlation-method`: `spearman` (default) or `pearson` for label correlation.
 - `--similarity-threshold` / `--min-label-gap` / `--max-pairs` / `--neighbor-count`: control "同征不同果" retrieval.
 - `--log-level`: customize verbosity when running the pipeline.
 
 ## Generated artifacts
 
-For each dataset a dedicated `EDA/<dataset_name>` folder contains:
+Artifacts include:
 
-- `challenge1_correlations.png` plus CSV correlation matrices for label relationships.
+- `challenge1_correlations.png` (label histograms/joint grids) and `challenge1_label_similarity.png` (cosine similarity with three-decimal annotations).
 - `challenge2_similarity_pairs.csv` with summary rows and `challenge2_radar_pair_<n>.png` visuals for divergent-outcome pairs (if any qualify).
-- `challenge3_kde.png` KDE of the configured feature pair and `metrics_summary.csv` for skewness/kurtosis.
+- `challenge3_kde.png` KDE of the configured feature pair, `challenge3_pairwise_kde.png` for sampled pairwise KDEs, and `metrics_summary.csv` for skewness/kurtosis.
 - `eda_report.md` pointing to all outputs so the generated paths are easy to find.

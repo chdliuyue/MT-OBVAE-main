@@ -60,20 +60,34 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     labels = list(label_df.columns)
     n_labels = len(labels)
     fig, axes = plt.subplots(n_labels, n_labels, figsize=(4 * n_labels, 4 * n_labels))
+    diag_palette = sns.color_palette("Set2", n_labels)
+    zero_color = "#d9d9d9"
 
     for i, label_i in enumerate(labels):
         for j, label_j in enumerate(labels):
             ax = axes[i, j]
             if i == j:
-                sns.histplot(
-                    label_df[label_i], bins="auto", discrete=True, ax=ax, color="#4C8C2B", edgecolor="white"
-                )
+                counts = label_df[label_i].value_counts().sort_index()
+                bar_colors = [zero_color if val == 0 else diag_palette[i] for val in counts.index]
+                ax.bar(counts.index, counts.values, color=bar_colors, edgecolor="white")
                 ax.set_xlabel(label_i)
                 ax.set_ylabel("Count")
                 ax.set_title(f"{label_i} distribution")
+                ax.set_xticks(counts.index)
             else:
-                joint_counts = pd.crosstab(label_df[label_i], label_df[label_j])
-                sns.heatmap(joint_counts, cmap="crest", ax=ax, cbar=True, linewidths=0.5, linecolor="white")
+                joint_counts = pd.crosstab(label_df[label_i], label_df[label_j]).astype(float)
+                if 0 in joint_counts.index and 0 in joint_counts.columns:
+                    joint_counts.loc[0, 0] = float("nan")
+                cmap = sns.diverging_palette(240, 10, as_cmap=True)
+                sns.heatmap(
+                    joint_counts,
+                    cmap=cmap,
+                    ax=ax,
+                    cbar=True,
+                    linewidths=0.5,
+                    linecolor="white",
+                    square=True,
+                )
                 ax.set_xlabel(label_j)
                 ax.set_ylabel(label_i)
                 ax.set_title(f"{label_i} vs {label_j}")
@@ -82,9 +96,6 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     fig.tight_layout()
     fig.savefig(output_path / "challenge1_correlations.png", dpi=300)
     plt.close(fig)
-
-    corr_df.to_csv(output_path / "challenge1_correlation_matrix.csv", index=True)
-    pval_df.to_csv(output_path / "challenge1_correlation_pvalues.csv", index=True)
 
     return corr_df, pval_df
 
@@ -99,7 +110,7 @@ def plot_label_similarity_heatmap(label_df: pd.DataFrame, output_path: Path) -> 
     sns.heatmap(
         sim_df,
         annot=True,
-        fmt=".2f",
+        fmt=".3f",
         cmap="viridis",
         square=True,
         cbar_kws={"shrink": 0.8},
