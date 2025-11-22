@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset-name",
         type=str,
-        default=None,
+        default="highD_ratio_20",
         help="Optional dataset identifier for logging and reports (defaults to data directory name)",
     )
     parser.add_argument(
@@ -92,8 +92,6 @@ Generated artifacts are stored under: `{output_dir}`.
 
 ## Challenge 1: Label relationships
 - Correlation grid & distributions: {correlation_paths / 'challenge1_correlations.png'}
-- Correlation coefficients: {correlation_paths / 'challenge1_correlation_matrix.csv'}
-- Correlation p-values: {correlation_paths / 'challenge1_correlation_pvalues.csv'}
 - Label similarity (cosine): {similarity_map.name}
 
 ## Challenge 2: Similar features, divergent outcomes
@@ -110,7 +108,7 @@ Generated artifacts are stored under: `{output_dir}`.
 
 def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
     dataset_name = args.dataset_name or args.data_root.name
-    output_dir = args.output_root / dataset_name
+    output_dir = args.output_root
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Loading merged dataset from %s", args.data_root)

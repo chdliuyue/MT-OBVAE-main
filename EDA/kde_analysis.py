@@ -62,7 +62,11 @@ def _annotated_hist(x, color, label=None, **kwargs):
 def plot_pairwise_kde_grid(feature_df: pd.DataFrame, output_dir: Path) -> Path:
     """Render KDE pairwise relationships for all feature combinations."""
 
+    max_rows = 2000
     data = feature_df.copy()
+    if len(data) > max_rows:
+        data = data.sample(n=max_rows, random_state=42)
+    data = data.reset_index(drop=True)
     grid = sns.PairGrid(data, corner=True, diag_sharey=False)
     grid.map_lower(
         lambda x, y, **kwargs: sns.kdeplot(

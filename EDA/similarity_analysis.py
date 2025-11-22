@@ -112,8 +112,12 @@ def plot_pair_comparison(
 
     feature_cols = FEATURE_COLUMNS
     label_cols = LABEL_COLUMNS
-    sample_a = feature_df.iloc[pair.anchor_index][feature_cols].values
-    sample_b = feature_df.iloc[pair.neighbor_index][feature_cols].values
+    feature_bounds = feature_df[feature_cols].agg(["min", "max"])
+    denom = (feature_bounds.loc["max"] - feature_bounds.loc["min"]).replace(0, 1)
+    sample_a_raw = feature_df.iloc[pair.anchor_index][feature_cols]
+    sample_b_raw = feature_df.iloc[pair.neighbor_index][feature_cols]
+    sample_a = ((sample_a_raw - feature_bounds.loc["min"]) / denom).values
+    sample_b = ((sample_b_raw - feature_bounds.loc["min"]) / denom).values
     labels_a = label_df.iloc[pair.anchor_index][label_cols].values
     labels_b = label_df.iloc[pair.neighbor_index][label_cols].values
 
@@ -126,27 +130,42 @@ def plot_pair_comparison(
     ax_radar = fig.add_subplot(grid[0, 0], polar=True)
     values_a = np.concatenate((sample_a, [sample_a[0]]))
     values_b = np.concatenate((sample_b, [sample_b[0]]))
-    ax_radar.plot(angles, values_a, label=f"Sample {pair.anchor_index}", color=PALETTE[0], linewidth=2)
+    ax_radar.plot(angles, values_a, label=f"Anchor idx {pair.anchor_index}", color=PALETTE[0], linewidth=2)
     ax_radar.fill(angles, values_a, alpha=0.18, color=PALETTE[0])
-    ax_radar.plot(angles, values_b, label=f"Sample {pair.neighbor_index}", color=PALETTE[2], linewidth=2)
+    ax_radar.plot(angles, values_b, label=f"Neighbor idx {pair.neighbor_index}", color=PALETTE[2], linewidth=2)
     ax_radar.fill(angles, values_b, alpha=0.18, color=PALETTE[2])
     ax_radar.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=8)
-    ax_radar.set_title("Feature similarity (radar)")
+    ax_radar.set_title("Feature similarity (radar, normalized 0-1)")
+    ax_radar.set_ylim(0, 1)
     ax_radar.legend(loc="upper right", bbox_to_anchor=(1.3, 1.05))
 
     # Bar chart for labels
     ax_bar = fig.add_subplot(grid[0, 1])
     positions = np.arange(len(label_cols))
     width = 0.35
-    ax_bar.bar(positions - width / 2, labels_a, width=width, label=f"Sample {pair.anchor_index}", color=PALETTE[1])
-    ax_bar.bar(positions + width / 2, labels_b, width=width, label=f"Sample {pair.neighbor_index}", color=PALETTE[3])
+    ax_bar.bar(
+        positions - width / 2,
+        labels_a,
+        width=width,
+        label=f"Anchor idx {pair.anchor_index}",
+        color=PALETTE[1],
+    )
+    ax_bar.bar(
+        positions + width / 2,
+        labels_b,
+        width=width,
+        label=f"Neighbor idx {pair.neighbor_index}",
+        color=PALETTE[3],
+        alpha=0.8,
+    )
     ax_bar.set_xticks(positions, label_cols)
     ax_bar.set_ylabel("Label level")
     ax_bar.set_title("Label divergence")
     ax_bar.legend()
 
     fig.suptitle(
-        f"Challenge 2: Divergent outcomes (sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f})",
+        f"Challenge 2: Divergent outcomes (sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f})\n"
+        "Indices refer to merged train/test rows",
         fontsize=14,
     )
     fig.tight_layout()
