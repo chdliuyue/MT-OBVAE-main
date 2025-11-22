@@ -15,10 +15,16 @@ from .similarity_analysis import find_divergent_pairs, plot_pair_comparison, sav
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="EDA pipeline for highD ratio datasets")
     parser.add_argument(
+        "--dataset-name",
+        type=str,
+        default=None,
+        help="Optional dataset identifier for logging and reports (defaults to data directory name)",
+    )
+    parser.add_argument(
         "--data-root",
         type=Path,
         default=Path("data/highD_ratio_20"),
-        help="Directory containing train_old.csv and test_old.csv for highD_ratio_20",
+        help="Directory containing train_old.csv and test_old.csv for the target dataset",
     )
     parser.add_argument(
         "--output-root",
@@ -66,6 +72,7 @@ def parse_args() -> argparse.Namespace:
 
 def write_report(
     output_dir: Path,
+    dataset_name: str,
     correlation_paths: Path,
     pair_summary: Path | None,
     pair_plots: List[Path],
@@ -79,7 +86,7 @@ def write_report(
     pair_summary_line = pair_summary.name if pair_summary else "(no qualifying pairs found)"
 
     report_content = f"""
-# EDA outputs for highD_ratio_20 (merged train_old + test_old)
+# EDA outputs for {dataset_name} (merged train_old + test_old)
 
 Generated artifacts are stored under: `{output_dir}`.
 
@@ -102,7 +109,8 @@ Generated artifacts are stored under: `{output_dir}`.
 
 
 def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
-    output_dir = args.output_root
+    dataset_name = args.dataset_name or args.data_root.name
+    output_dir = args.output_root / dataset_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Loading merged dataset from %s", args.data_root)
@@ -131,13 +139,14 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
     else:
         logger.warning("No divergent pairs found with current thresholds")
 
-    kde_path = plot_joint_kde(features, ("UF", "UAS"), output_dir, "highD_ratio_20")
+    kde_path = plot_joint_kde(features, ("UF", "UAS"), output_dir, dataset_name)
     pairwise_kde_path = plot_pairwise_kde_grid(features[FEATURE_COLUMNS], output_dir)
     metrics_df = compute_shape_metrics(features, FEATURE_COLUMNS)
     metrics_path = save_metrics(metrics_df, output_dir)
 
     write_report(
         output_dir,
+        dataset_name,
         corr_dir,
         pair_summary_path,
         pair_plots,
@@ -154,7 +163,8 @@ def main() -> None:
     logging.basicConfig(level=args.log_level, format="[%(levelname)s] %(message)s")
     logger = logging.getLogger("eda")
 
-    logger.info("Running unified EDA for highD_ratio_20")
+    dataset_name = args.dataset_name or args.data_root.name
+    logger.info("Running unified EDA for %s", dataset_name)
     run_full_pipeline(args, logger)
     logger.info("EDA generation complete. Root outputs live under %s", args.output_root)
 
