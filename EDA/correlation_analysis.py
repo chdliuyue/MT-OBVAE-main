@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
+from sklearn.metrics.pairwise import cosine_similarity
 
-sns.set_theme(style="whitegrid")
+sns.set_theme(style="white", context="talk")
 
 
 def compute_correlations(label_df: pd.DataFrame, method: str = "spearman") -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -64,13 +65,15 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
         for j, label_j in enumerate(labels):
             ax = axes[i, j]
             if i == j:
-                sns.histplot(label_df[label_i], bins="auto", discrete=True, ax=ax, color="#5B8FF9")
+                sns.histplot(
+                    label_df[label_i], bins="auto", discrete=True, ax=ax, color="#4C8C2B", edgecolor="white"
+                )
                 ax.set_xlabel(label_i)
                 ax.set_ylabel("Count")
                 ax.set_title(f"{label_i} distribution")
             else:
                 joint_counts = pd.crosstab(label_df[label_i], label_df[label_j])
-                sns.heatmap(joint_counts, cmap="mako", ax=ax, cbar=True)
+                sns.heatmap(joint_counts, cmap="crest", ax=ax, cbar=True, linewidths=0.5, linecolor="white")
                 ax.set_xlabel(label_j)
                 ax.set_ylabel(label_i)
                 ax.set_title(f"{label_i} vs {label_j}")
@@ -84,3 +87,30 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     pval_df.to_csv(output_path / "challenge1_correlation_pvalues.csv", index=True)
 
     return corr_df, pval_df
+
+
+def plot_label_similarity_heatmap(label_df: pd.DataFrame, output_path: Path) -> Path:
+    """Compute and visualize cosine similarity among labels."""
+
+    similarity_matrix = cosine_similarity(label_df.T)
+    sim_df = pd.DataFrame(similarity_matrix, index=label_df.columns, columns=label_df.columns)
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(
+        sim_df,
+        annot=True,
+        fmt=".2f",
+        cmap="viridis",
+        square=True,
+        cbar_kws={"shrink": 0.8},
+        linewidths=0.5,
+        linecolor="white",
+        ax=ax,
+    )
+    ax.set_title("Label similarity matrix (cosine)")
+    fig.tight_layout()
+
+    output_file = output_path / "challenge1_label_similarity.png"
+    fig.savefig(output_file, dpi=300)
+    plt.close(fig)
+    return output_file
