@@ -7,11 +7,14 @@ from typing import List, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib import cm
+import seaborn as sns
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 
 from .data_loader import FEATURE_COLUMNS, LABEL_COLUMNS
+
+
+PALETTE = sns.color_palette("deep")
 
 
 @dataclass
@@ -123,10 +126,10 @@ def plot_pair_comparison(
     ax_radar = fig.add_subplot(grid[0, 0], polar=True)
     values_a = np.concatenate((sample_a, [sample_a[0]]))
     values_b = np.concatenate((sample_b, [sample_b[0]]))
-    ax_radar.plot(angles, values_a, label=f"Sample {pair.anchor_index}", color=cm.Set2(0))
-    ax_radar.fill(angles, values_a, alpha=0.15, color=cm.Set2(0))
-    ax_radar.plot(angles, values_b, label=f"Sample {pair.neighbor_index}", color=cm.Set2(1))
-    ax_radar.fill(angles, values_b, alpha=0.15, color=cm.Set2(1))
+    ax_radar.plot(angles, values_a, label=f"Sample {pair.anchor_index}", color=PALETTE[0], linewidth=2)
+    ax_radar.fill(angles, values_a, alpha=0.18, color=PALETTE[0])
+    ax_radar.plot(angles, values_b, label=f"Sample {pair.neighbor_index}", color=PALETTE[2], linewidth=2)
+    ax_radar.fill(angles, values_b, alpha=0.18, color=PALETTE[2])
     ax_radar.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=8)
     ax_radar.set_title("Feature similarity (radar)")
     ax_radar.legend(loc="upper right", bbox_to_anchor=(1.3, 1.05))
@@ -135,8 +138,8 @@ def plot_pair_comparison(
     ax_bar = fig.add_subplot(grid[0, 1])
     positions = np.arange(len(label_cols))
     width = 0.35
-    ax_bar.bar(positions - width / 2, labels_a, width=width, label=f"Sample {pair.anchor_index}", color=cm.Set2(2))
-    ax_bar.bar(positions + width / 2, labels_b, width=width, label=f"Sample {pair.neighbor_index}", color=cm.Set2(3))
+    ax_bar.bar(positions - width / 2, labels_a, width=width, label=f"Sample {pair.anchor_index}", color=PALETTE[1])
+    ax_bar.bar(positions + width / 2, labels_b, width=width, label=f"Sample {pair.neighbor_index}", color=PALETTE[3])
     ax_bar.set_xticks(positions, label_cols)
     ax_bar.set_ylabel("Label level")
     ax_bar.set_title("Label divergence")

@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import List
 
 from . import data_loader
-from .correlation_analysis import plot_label_relationships
-from .kde_analysis import compute_shape_metrics, plot_joint_kde, save_metrics
+from .correlation_analysis import plot_label_relationships, plot_label_similarity_heatmap
+from .data_loader import FEATURE_COLUMNS
+from .kde_analysis import compute_shape_metrics, plot_joint_kde, plot_pairwise_kde_grid, save_metrics
 from .similarity_analysis import find_divergent_pairs, plot_pair_comparison, save_pair_summary
 
 
@@ -16,20 +17,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-root",
         type=Path,
-        default=Path("data"),
-        help="Root directory that contains highD_ratio_* folders",
-    )
-    parser.add_argument(
-        "--ratios",
-        nargs="+",
-        default=None,
-        help="Specific highD_ratio_* folders to process (defaults to discovering all)",
+        default=Path("data/highD_ratio_20"),
+        help="Directory containing train_old.csv and test_old.csv for highD_ratio_20",
     )
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("output"),
-        help="Root directory for generated assets; per subset outputs go to output/<ratio>/EDA",
+        default=Path("output/EDA"),
+        help="Directory for generated assets",
     )
     parser.add_argument(
         "--correlation-method",
@@ -62,13 +57,6 @@ def parse_args() -> argparse.Namespace:
         help="Number of nearest neighbors to scan for divergent-outcome retrieval",
     )
     parser.add_argument(
-        "--kde-features",
-        nargs=2,
-        metavar=("FEATURE_X", "FEATURE_Y"),
-        default=["UF", "UAS"],
-        help="Two key features for 2D KDE visualizations",
-    )
-    parser.add_argument(
         "--log-level",
         default="INFO",
         help="Logging level (e.g., INFO, DEBUG)",
@@ -76,25 +64,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def discover_ratios(data_root: Path) -> List[str]:
-    return sorted([p.name for p in data_root.glob("highD_ratio_*") if p.is_dir()])
-
-
 def write_report(
-    subset_name: str,
     output_dir: Path,
     correlation_paths: Path,
     pair_summary: Path | None,
     pair_plots: List[Path],
     kde_path: Path,
+    pairwise_kde_path: Path,
     metrics_path: Path,
+    similarity_map: Path,
 ) -> None:
     report_path = output_dir / "eda_report.md"
     pair_section = "\n".join([f"- {p.name}" for p in pair_plots]) if pair_plots else "- (no qualifying pairs found)"
     pair_summary_line = pair_summary.name if pair_summary else "(no qualifying pairs found)"
 
     report_content = f"""
-# EDA outputs for {subset_name}
+# EDA outputs for highD_ratio_20 (merged train_old + test_old)
 
 Generated artifacts are stored under: `{output_dir}`.
 
@@ -102,35 +87,31 @@ Generated artifacts are stored under: `{output_dir}`.
 - Correlation grid & distributions: {correlation_paths / 'challenge1_correlations.png'}
 - Correlation coefficients: {correlation_paths / 'challenge1_correlation_matrix.csv'}
 - Correlation p-values: {correlation_paths / 'challenge1_correlation_pvalues.csv'}
+- Label similarity (cosine): {similarity_map.name}
 
 ## Challenge 2: Similar features, divergent outcomes
 - Pair summary: {pair_summary_line}
 - Pair visuals:\n{pair_section}
 
 ## Challenge 3: Key feature KDE & tail statistics
-- KDE plot: {kde_path.name}
+- KDE plot (UF vs UAS): {kde_path.name}
+- Pairwise KDE grid: {pairwise_kde_path.name}
 - Skewness/kurtosis table: {metrics_path.name}
 """
     report_path.write_text(report_content.strip() + "\n", encoding="utf-8")
 
 
-def run_for_subset(args: argparse.Namespace, subset_name: str, logger: logging.Logger) -> None:
-    data_dir = args.data_root / subset_name
-    output_dir = args.output_root / subset_name / "EDA"
+def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
+    output_dir = args.output_root
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Processing subset %s", subset_name)
-    features, labels = data_loader.load_training_split(data_dir)
-
-    missing_kde_features = [f for f in args.kde_features if f not in features.columns]
-    if missing_kde_features:
-        raise ValueError(
-            f"Requested KDE features {missing_kde_features} not found in dataset columns"
-        )
+    logger.info("Loading merged dataset from %s", args.data_root)
+    features, labels = data_loader.load_full_dataset(args.data_root)
 
     corr_dir = output_dir
     _ = plot_label_relationships(labels, corr_dir, method=args.correlation_method)
-    logger.info("Correlation analysis completed for %s", subset_name)
+    similarity_map = plot_label_similarity_heatmap(labels, corr_dir)
+    logger.info("Correlation and similarity analysis completed")
 
     pairs = find_divergent_pairs(
         features,
@@ -146,24 +127,26 @@ def run_for_subset(args: argparse.Namespace, subset_name: str, logger: logging.L
         pair_summary_path = save_pair_summary(pairs, output_dir)
         for idx, pair in enumerate(pairs, start=1):
             pair_plots.append(plot_pair_comparison(features, labels, pair, output_dir, idx))
-        logger.info("Identified %d divergent pairs for %s", len(pairs), subset_name)
+        logger.info("Identified %d divergent pairs", len(pairs))
     else:
-        logger.warning("No divergent pairs found for %s with current thresholds", subset_name)
+        logger.warning("No divergent pairs found with current thresholds")
 
-    kde_path = plot_joint_kde(features, tuple(args.kde_features), output_dir, subset_name)
-    metrics_df = compute_shape_metrics(features, args.kde_features)
+    kde_path = plot_joint_kde(features, ("UF", "UAS"), output_dir, "highD_ratio_20")
+    pairwise_kde_path = plot_pairwise_kde_grid(features[FEATURE_COLUMNS], output_dir)
+    metrics_df = compute_shape_metrics(features, FEATURE_COLUMNS)
     metrics_path = save_metrics(metrics_df, output_dir)
 
     write_report(
-        subset_name,
         output_dir,
         corr_dir,
         pair_summary_path,
         pair_plots,
         kde_path,
+        pairwise_kde_path,
         metrics_path,
+        similarity_map,
     )
-    logger.info("Finished processing %s. Outputs saved to %s", subset_name, output_dir)
+    logger.info("Finished processing. Outputs saved to %s", output_dir)
 
 
 def main() -> None:
@@ -171,19 +154,8 @@ def main() -> None:
     logging.basicConfig(level=args.log_level, format="[%(levelname)s] %(message)s")
     logger = logging.getLogger("eda")
 
-    subsets = args.ratios or discover_ratios(args.data_root)
-    if not subsets:
-        raise ValueError(f"No highD_ratio_* directories found under {args.data_root}")
-
-    if len(args.kde_features) != 2:
-        raise ValueError("--kde-features requires exactly two feature names")
-
-    logger.info(
-        "Running EDA for %d subset(s): %s", len(subsets), ", ".join(subsets)
-    )
-    for subset in subsets:
-        run_for_subset(args, subset, logger)
-
+    logger.info("Running unified EDA for highD_ratio_20")
+    run_full_pipeline(args, logger)
     logger.info("EDA generation complete. Root outputs live under %s", args.output_root)
 
 
