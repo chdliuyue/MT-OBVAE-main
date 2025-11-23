@@ -60,7 +60,9 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
 
     labels = list(label_df.columns)
     n_labels = len(labels)
-    fig, axes = plt.subplots(n_labels, n_labels, figsize=(4 * n_labels, 4 * n_labels))
+    fig, axes = plt.subplots(
+        n_labels, n_labels, figsize=(4 * n_labels, 4 * n_labels), constrained_layout=True
+    )
     diag_palette = sns.color_palette("viridis", n_labels)
     zero_color = "#f0f0f0"
     norm = Normalize(vmin=0, vmax=1)
@@ -102,19 +104,17 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
                 ax.set_title("")
 
     if shared_heatmap is not None:
-        fig.subplots_adjust(right=0.9)
         cbar = fig.colorbar(
             shared_heatmap.collections[0],
             ax=axes,
-            location="right",
-            fraction=0.045,
-            pad=0.02,
-            shrink=0.85,
+            location="bottom",
+            fraction=0.05,
+            pad=0.08,
+            orientation="horizontal",
         )
         cbar.set_label("Joint frequency (normalized)")
         cbar.set_ticks(np.linspace(0, 1, 5))
 
-    fig.tight_layout()
     fig.savefig(output_path / "challenge1_correlations.png", dpi=300)
     plt.close(fig)
 
