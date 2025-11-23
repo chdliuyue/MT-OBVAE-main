@@ -133,28 +133,20 @@ def plot_label_similarity_heatmap(label_df: pd.DataFrame, output_path: Path) -> 
     similarity_matrix = cosine_similarity(label_df.T)
     sim_df = pd.DataFrame(similarity_matrix, index=label_df.columns, columns=label_df.columns)
 
-    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
-    heatmap = sns.heatmap(
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(
         sim_df,
         annot=True,
         fmt=".3f",
         cmap="viridis",
         square=True,
-        cbar=False,
+        cbar_kws={"shrink": 0.8},
         linewidths=0.5,
         linecolor="white",
         ax=ax,
     )
-    cbar = fig.colorbar(
-        heatmap.collections[0],
-        ax=ax,
-        fraction=0.046,
-        pad=0.04,
-        orientation="vertical",
-    )
-    cbar.set_label("Cosine similarity")
-    cbar.set_ticks(np.linspace(0, 1, 5))
-    ax.set_title("")
+    ax.set_title("Label similarity matrix (cosine)")
+    fig.tight_layout()
 
     output_file = output_path / "challenge1_label_similarity.png"
     fig.savefig(output_file, dpi=300)

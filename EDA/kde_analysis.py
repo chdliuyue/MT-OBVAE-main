@@ -46,7 +46,7 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
         output_paths.append(output_path)
 
     # Combined lower-triangle KDE grid
-    grid = sns.PairGrid(data, corner=True)
+    grid = sns.PairGrid(data, corner=True, diag_sharey=False, height=2.6, aspect=1.05)
     grid.map_lower(
         sns.kdeplot,
         fill=True,
@@ -54,7 +54,20 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
         levels=20,
         cmap=kde_cmap,
     )
-    grid.map_diag(sns.histplot, color="#4c72b0", alpha=0.8, edgecolor="white")
+    grid.map_diag(
+        sns.kdeplot,
+        fill=True,
+        color="#4c72b0",
+        alpha=0.7,
+        linewidth=1.2,
+        common_norm=False,
+    )
+    for ax in grid.axes.flatten():
+        if ax is None:
+            continue
+        ax.tick_params(axis="both", labelsize=7, labelbottom=True, labelleft=True)
+    grid.fig.set_size_inches(max(12, 2.6 * data.shape[1] * 0.65), max(12, 2.6 * data.shape[1] * 0.65))
+    grid.fig.tight_layout(rect=[0, 0, 1, 0.96])
     grid.fig.subplots_adjust(top=0.95)
     grid.fig.suptitle("Challenge 3: Pairwise KDE overview (lower triangle)", fontsize=14)
 

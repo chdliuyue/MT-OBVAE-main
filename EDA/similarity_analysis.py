@@ -56,7 +56,7 @@ def find_divergent_pairs(
         Number of nearest neighbors to scan per sample when searching for pairs.
     """
 
-    if len(feature_df) < 2:
+    if len(feature_df) < 2 or max_pairs <= 0 or neighbor_count <= 0:
         return []
 
     scaler = StandardScaler()
