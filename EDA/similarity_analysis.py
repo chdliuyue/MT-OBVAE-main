@@ -14,10 +14,10 @@ from sklearn.preprocessing import StandardScaler
 from .data_loader import FEATURE_COLUMNS, LABEL_COLUMNS
 
 
-ANCHOR_COLOR = "#1f78b4"  # deep blue for clear contrast
-NEIGHBOR_COLOR = "#e31a1c"  # vivid red to stand apart from blue
-ANCHOR_BAR_COLOR = "#a6cee3"  # light blue for bars
-NEIGHBOR_BAR_COLOR = "#fcae91"  # warm coral for bars
+ANCHOR_COLOR = "#1d4f91"  # saturated navy for strong contrast
+NEIGHBOR_COLOR = "#f16913"  # vivid orange that separates clearly from blue
+ANCHOR_BAR_COLOR = "#8fb7e2"  # lightened blue for bars
+NEIGHBOR_BAR_COLOR = "#f6a04d"  # bright amber for bars
 
 
 @dataclass
@@ -35,7 +35,7 @@ def find_divergent_pairs(
     label_df: pd.DataFrame,
     similarity_threshold: float = 0.95,
     min_label_gap: float = 2.0,
-    max_pairs: int = 10,
+    max_pairs: int = 50,
     neighbor_count: int = 25,
 ) -> List[DivergentPair]:
     """Find sample pairs with high feature similarity but distinct labels.
@@ -93,7 +93,7 @@ def find_divergent_pairs(
                 )
                 seen.add(pair)
 
-    ranked = sorted(candidates, key=lambda p: (-p.label_gap, -p.similarity))
+    ranked = sorted(candidates, key=lambda p: (-p.similarity, -p.label_gap))
     if len(ranked) > max_pairs:
         return ranked[:max_pairs]
     return ranked
@@ -127,17 +127,29 @@ def plot_pair_comparison(
 
     angles, _ = _radar_factory(len(feature_cols))
 
-    fig = plt.figure(figsize=(10.5, 5.8), constrained_layout=True)
+    fig = plt.figure(figsize=(10.5, 6.6), constrained_layout=True)
     grid = fig.add_gridspec(1, 2, width_ratios=[1.9, 1], wspace=0.35)
 
     # Radar chart for features
     ax_radar = fig.add_subplot(grid[0, 0], polar=True)
     values_a = np.concatenate((sample_a, [sample_a[0]]))
     values_b = np.concatenate((sample_b, [sample_b[0]]))
-    ax_radar.plot(angles, values_a, label=f"Anchor idx {pair.anchor_index}", color=ANCHOR_COLOR, linewidth=2)
-    ax_radar.fill(angles, values_a, alpha=0.18, color=ANCHOR_COLOR)
-    ax_radar.plot(angles, values_b, label=f"Neighbor idx {pair.neighbor_index}", color=NEIGHBOR_COLOR, linewidth=2)
-    ax_radar.fill(angles, values_b, alpha=0.18, color=NEIGHBOR_COLOR)
+    ax_radar.plot(
+        angles,
+        values_a,
+        label=f"Anchor idx {pair.anchor_index}",
+        color=ANCHOR_COLOR,
+        linewidth=2.3,
+    )
+    ax_radar.fill(angles, values_a, alpha=0.3, color=ANCHOR_COLOR)
+    ax_radar.plot(
+        angles,
+        values_b,
+        label=f"Neighbor idx {pair.neighbor_index}",
+        color=NEIGHBOR_COLOR,
+        linewidth=2.3,
+    )
+    ax_radar.fill(angles, values_b, alpha=0.2, color=NEIGHBOR_COLOR)
     ax_radar.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=9)
     ax_radar.set_title("Feature similarity (radar, normalized 0-1)")
     ax_radar.set_ylim(0, 1)
@@ -178,8 +190,8 @@ def plot_pair_comparison(
     fig.legend(
         handles,
         labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.07),
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.04),
         ncol=2,
         frameon=False,
     )
@@ -188,11 +200,11 @@ def plot_pair_comparison(
         "Challenge 2: Top high-similarity pairs ranked by label gap\n"
         f"Pair {pair_id}: sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f} (indices from merged dataset)",
         fontsize=14,
-        y=1.08,
+        y=1.02,
     )
 
     output_path = output_dir / f"challenge2_radar_pair_{pair_id}.png"
-    fig.savefig(output_path, dpi=300)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return output_path
 
