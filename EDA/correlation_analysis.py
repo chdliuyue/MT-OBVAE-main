@@ -9,6 +9,7 @@ import pandas as pd
 import seaborn as sns
 from scipy import stats
 from sklearn.metrics.pairwise import cosine_similarity
+from matplotlib.colors import Normalize
 
 sns.set_theme(style="white", context="talk")
 
@@ -62,6 +63,8 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     fig, axes = plt.subplots(n_labels, n_labels, figsize=(4 * n_labels, 4 * n_labels))
     diag_palette = sns.color_palette("viridis", n_labels)
     zero_color = "#f0f0f0"
+    norm = Normalize(vmin=0, vmax=1)
+    shared_heatmap = None
 
     for i, label_i in enumerate(labels):
         for j, label_j in enumerate(labels):
@@ -77,19 +80,37 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
                 joint_counts = pd.crosstab(label_df[label_i], label_df[label_j]).astype(float)
                 if 0 in joint_counts.index and 0 in joint_counts.columns:
                     joint_counts.loc[0, 0] = float("nan")
+                max_count = np.nanmax(joint_counts.values) if not np.all(np.isnan(joint_counts.values)) else 1.0
+                normalized_counts = joint_counts / max(max_count, 1e-9)
                 cmap = sns.color_palette("viridis", as_cmap=True)
-                sns.heatmap(
-                    joint_counts,
+                heatmap = sns.heatmap(
+                    normalized_counts,
                     cmap=cmap,
                     ax=ax,
-                    cbar=True,
+                    cbar=False,
                     linewidths=0.5,
                     linecolor="white",
                     square=True,
+                    vmin=0,
+                    vmax=1,
+                    norm=norm,
                 )
+                if shared_heatmap is None:
+                    shared_heatmap = heatmap
                 ax.set_xlabel(label_j)
                 ax.set_ylabel(label_i)
                 ax.set_title("")
+
+    if shared_heatmap is not None:
+        cbar = fig.colorbar(
+            shared_heatmap.collections[0],
+            ax=[axes[i, j] for i in range(n_labels) for j in range(n_labels) if i != j],
+            fraction=0.05,
+            pad=0.02,
+            shrink=0.7,
+        )
+        cbar.set_label("Joint frequency (normalized)")
+        cbar.set_ticks(np.linspace(0, 1, 5))
 
     fig.tight_layout()
     fig.savefig(output_path / "challenge1_correlations.png", dpi=300)
