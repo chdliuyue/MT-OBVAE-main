@@ -102,12 +102,14 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
                 ax.set_title("")
 
     if shared_heatmap is not None:
+        fig.subplots_adjust(right=0.9)
         cbar = fig.colorbar(
             shared_heatmap.collections[0],
-            ax=[axes[i, j] for i in range(n_labels) for j in range(n_labels) if i != j],
-            fraction=0.05,
+            ax=axes,
+            location="right",
+            fraction=0.045,
             pad=0.02,
-            shrink=0.7,
+            shrink=0.85,
         )
         cbar.set_label("Joint frequency (normalized)")
         cbar.set_ticks(np.linspace(0, 1, 5))

@@ -16,7 +16,7 @@ Key arguments:
 - `--dataset-name`: optional label used in logs/report titles (defaults to `highD_ratio_20`).
 - `--output-root`: base directory where results are written (artifacts now sit directly under this path).
 - `--correlation-method`: `spearman` (default) or `pearson` for label correlation.
-- `--similarity-threshold` / `--min-label-gap` / `--max-pairs` / `--neighbor-count`: control "同征不同果" retrieval.
+- `--similarity-threshold` / `--min-label-gap` / `--max-pairs` / `--neighbor-count`: control "同征不同果" retrieval (up to 10 pairs by default).
 - `--log-level`: customize verbosity when running the pipeline.
 
 ## Generated artifacts
@@ -25,5 +25,5 @@ Artifacts include:
 
 - `challenge1_correlations.png` (label histograms/joint grids) and `challenge1_label_similarity.png` (cosine similarity with three-decimal annotations).
 - `challenge2_similarity_pairs.csv` with summary rows and `challenge2_radar_pair_<n>.png` visuals for divergent-outcome pairs (if any qualify).
-- `challenge3_kde.png` KDE of the configured feature pair, `challenge3_pairwise_kde.png` for sampled pairwise KDEs, and `metrics_summary.csv` for skewness/kurtosis.
+- `challenge3_pairwise_kde_<x>_vs_<y>.png` standalone KDE plots for every feature combination (sampled to 2000 rows when needed), and `metrics_summary.csv` for skewness/kurtosis.
 - `eda_report.md` pointing to all outputs so the generated paths are easy to find.
