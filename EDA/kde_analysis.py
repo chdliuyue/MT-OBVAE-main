@@ -31,8 +31,7 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
             fill=True,
             thresh=0.03,
             levels=25,
-            cmap="magma",
-            linewidths=0.6,
+            cmap=sns.color_palette("rocket", as_cmap=True),
             ax=ax,
         )
         ax.set_title(f"Challenge 3: KDE for {x_col} vs {y_col}", pad=12)

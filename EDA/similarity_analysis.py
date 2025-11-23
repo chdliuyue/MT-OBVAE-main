@@ -126,8 +126,8 @@ def plot_pair_comparison(
 
     angles, _ = _radar_factory(len(feature_cols))
 
-    fig = plt.figure(figsize=(10, 5.5))
-    grid = fig.add_gridspec(1, 2, width_ratios=[1.8, 1], wspace=0.18)
+    fig = plt.figure(figsize=(10, 5.5), constrained_layout=True)
+    grid = fig.add_gridspec(1, 2, width_ratios=[1.8, 1], wspace=0.25)
 
     # Radar chart for features
     ax_radar = fig.add_subplot(grid[0, 0], polar=True)
@@ -181,15 +181,21 @@ def plot_pair_comparison(
         h, l = ax.get_legend_handles_labels()
         handles.extend(h)
         labels.extend(l)
-    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.98), ncol=2, frameon=False)
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.07),
+        ncol=2,
+        frameon=False,
+    )
 
     fig.suptitle(
         "Challenge 2: Top high-similarity pairs ranked by label gap\n"
         f"Pair {pair_id}: sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f} (indices from merged dataset)",
         fontsize=14,
-        y=1.02,
+        y=1.08,
     )
-    fig.tight_layout(rect=[0, 0.04, 1, 0.95])
 
     output_path = output_dir / f"challenge2_radar_pair_{pair_id}.png"
     fig.savefig(output_path, dpi=300)
