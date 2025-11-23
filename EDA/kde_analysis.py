@@ -22,6 +22,7 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
     data = data.reset_index(drop=True)
 
     output_paths: List[Path] = []
+    kde_cmap = sns.color_palette("crest", as_cmap=True)
     for x_col, y_col in combinations(data.columns, 2):
         fig, ax = plt.subplots(figsize=(6.4, 5.4))
         sns.kdeplot(
@@ -31,7 +32,7 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
             fill=True,
             thresh=0.03,
             levels=25,
-            cmap=sns.color_palette("rocket", as_cmap=True),
+            cmap=kde_cmap,
             ax=ax,
         )
         ax.set_title(f"Challenge 3: KDE for {x_col} vs {y_col}", pad=12)
@@ -43,6 +44,24 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
         fig.savefig(output_path, dpi=300)
         plt.close(fig)
         output_paths.append(output_path)
+
+    # Combined lower-triangle KDE grid
+    grid = sns.PairGrid(data, corner=True)
+    grid.map_lower(
+        sns.kdeplot,
+        fill=True,
+        thresh=0.03,
+        levels=20,
+        cmap=kde_cmap,
+    )
+    grid.map_diag(sns.histplot, color="#4c72b0", alpha=0.8, edgecolor="white")
+    grid.fig.subplots_adjust(top=0.95)
+    grid.fig.suptitle("Challenge 3: Pairwise KDE overview (lower triangle)", fontsize=14)
+
+    combined_path = output_dir / "challenge3_pairwise_kde_overview.png"
+    grid.savefig(combined_path, dpi=300)
+    plt.close(grid.fig)
+    output_paths.insert(0, combined_path)
 
     return output_paths
 
