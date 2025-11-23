@@ -202,6 +202,94 @@ def plot_pair_comparison(
     return output_path
 
 
+def plot_radar_grid(
+    feature_df: pd.DataFrame,
+    pairs: Sequence[DivergentPair],
+    output_dir: Path,
+    top_k: int = 20,
+) -> Path | None:
+    """Plot a consolidated radar grid for the top divergent pairs.
+
+    The grid highlights feature similarity for the strongest ``top_k`` pairs
+    (sorted upstream), arranged as 4 rows x 5 columns with only radar charts.
+    Each panel annotates cosine similarity and the observed label gap to
+    emphasize cases where similar feature patterns correspond to divergent
+    outcomes.
+    """
+
+    if not pairs:
+        return None
+
+    feature_cols = FEATURE_COLUMNS
+    feature_bounds = feature_df[feature_cols].agg(["min", "max"])
+    denom = (feature_bounds.loc["max"] - feature_bounds.loc["min"]).replace(0, 1)
+
+    selected = list(pairs[:top_k])
+    angles, _ = _radar_factory(len(feature_cols))
+
+    fig, axes = plt.subplots(
+        nrows=4,
+        ncols=5,
+        figsize=(24, 16),
+        subplot_kw={"polar": True},
+        constrained_layout=True,
+    )
+    flat_axes = axes.flatten()
+
+    for ax_idx, (ax, pair) in enumerate(zip(flat_axes, selected), start=1):
+        sample_a = (
+            (feature_df.iloc[pair.anchor_index][feature_cols] - feature_bounds.loc["min"])
+            / denom
+        ).values
+        sample_b = (
+            (feature_df.iloc[pair.neighbor_index][feature_cols] - feature_bounds.loc["min"])
+            / denom
+        ).values
+
+        values_a = np.concatenate((sample_a, [sample_a[0]]))
+        values_b = np.concatenate((sample_b, [sample_b[0]]))
+
+        ax.plot(angles, values_a, color=ANCHOR_COLOR, linewidth=1.8)
+        ax.fill(angles, values_a, alpha=0.25, color=ANCHOR_COLOR)
+        ax.plot(angles, values_b, color=NEIGHBOR_COLOR, linewidth=1.8)
+        ax.fill(angles, values_b, alpha=0.2, color=NEIGHBOR_COLOR)
+
+        ax.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=8)
+        ax.set_ylim(0, 1)
+        ax.set_yticklabels([])
+        ax.set_title(
+            f"#{ax_idx}: sim {pair.similarity:.2f}\nlabel gap {pair.label_gap:.1f}",
+            fontsize=11,
+            pad=12,
+        )
+
+    # Hide unused axes if fewer than 20 pairs are available
+    for ax in flat_axes[len(selected) :]:
+        ax.set_visible(False)
+
+    legend_handles = [
+        plt.Line2D([0], [0], color=ANCHOR_COLOR, lw=2, label="Anchor"),
+        plt.Line2D([0], [0], color=NEIGHBOR_COLOR, lw=2, label="Neighbor"),
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        ncol=2,
+        bbox_to_anchor=(0.5, -0.02),
+        frameon=False,
+    )
+    fig.suptitle(
+        "Challenge 2: top feature-similar pairs with large label gaps",
+        fontsize=16,
+        y=1.02,
+    )
+
+    output_path = output_dir / "challenge2_radar_grid_top20.png"
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
 def save_pair_summary(pairs: Sequence[DivergentPair], output_dir: Path) -> Path:
     """Save a tabular summary of the divergent pairs."""
 
