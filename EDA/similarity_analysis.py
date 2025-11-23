@@ -92,10 +92,11 @@ def find_divergent_pairs(
                     )
                 )
                 seen.add(pair)
-                if len(candidates) >= max_pairs:
-                    return sorted(candidates, key=lambda p: (-p.label_gap, -p.similarity))
 
-    return sorted(candidates, key=lambda p: (-p.label_gap, -p.similarity))
+    ranked = sorted(candidates, key=lambda p: (-p.label_gap, -p.similarity))
+    if len(ranked) > max_pairs:
+        return ranked[:max_pairs]
+    return ranked
 
 
 def _radar_factory(num_vars: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -126,8 +127,8 @@ def plot_pair_comparison(
 
     angles, _ = _radar_factory(len(feature_cols))
 
-    fig = plt.figure(figsize=(10, 5.5), constrained_layout=True)
-    grid = fig.add_gridspec(1, 2, width_ratios=[1.8, 1], wspace=0.25)
+    fig = plt.figure(figsize=(10.5, 5.8), constrained_layout=True)
+    grid = fig.add_gridspec(1, 2, width_ratios=[1.9, 1], wspace=0.35)
 
     # Radar chart for features
     ax_radar = fig.add_subplot(grid[0, 0], polar=True)
@@ -168,13 +169,6 @@ def plot_pair_comparison(
 
     y_max = max(np.max(labels_a), np.max(labels_b)) if len(labels_a) and len(labels_b) else 3
     ax_bar.set_ylim(0, max(3.2, y_max + 0.4))
-
-    for bar_a, bar_b in zip(bars_a, bars_b):
-        ax_bar.text(bar_a.get_x() + bar_a.get_width() / 2, bar_a.get_height() + 0.05, f"{bar_a.get_height():.0f}", ha="center", va="bottom", fontsize=11)
-        ax_bar.text(bar_b.get_x() + bar_b.get_width() / 2, bar_b.get_height() + 0.05, f"{bar_b.get_height():.0f}", ha="center", va="bottom", fontsize=11)
-        delta = bar_b.get_height() - bar_a.get_height()
-        midpoint = (bar_a.get_x() + bar_b.get_x() + bar_b.get_width()) / 2
-        ax_bar.text(midpoint, max(bar_a.get_height(), bar_b.get_height()) + 0.15, f"Δ={delta:.1f}", ha="center", va="bottom", fontsize=10, color="#4b4b4b")
 
     handles, labels = [], []
     for ax in (ax_radar, ax_bar):

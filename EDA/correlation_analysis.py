@@ -107,10 +107,10 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
         cbar = fig.colorbar(
             shared_heatmap.collections[0],
             ax=axes,
-            location="bottom",
-            fraction=0.05,
-            pad=0.08,
-            orientation="horizontal",
+            location="right",
+            fraction=0.035,
+            pad=0.04,
+            orientation="vertical",
         )
         cbar.set_label("Joint frequency (normalized)")
         cbar.set_ticks(np.linspace(0, 1, 5))
