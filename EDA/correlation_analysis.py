@@ -60,8 +60,8 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     labels = list(label_df.columns)
     n_labels = len(labels)
     fig, axes = plt.subplots(n_labels, n_labels, figsize=(4 * n_labels, 4 * n_labels))
-    diag_palette = sns.color_palette("Set2", n_labels)
-    zero_color = "#d9d9d9"
+    diag_palette = sns.color_palette("viridis", n_labels)
+    zero_color = "#f0f0f0"
 
     for i, label_i in enumerate(labels):
         for j, label_j in enumerate(labels):
@@ -72,13 +72,12 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
                 ax.bar(counts.index, counts.values, color=bar_colors, edgecolor="white")
                 ax.set_xlabel(label_i)
                 ax.set_ylabel("Count")
-                ax.set_title(f"{label_i} distribution")
                 ax.set_xticks(counts.index)
             else:
                 joint_counts = pd.crosstab(label_df[label_i], label_df[label_j]).astype(float)
                 if 0 in joint_counts.index and 0 in joint_counts.columns:
                     joint_counts.loc[0, 0] = float("nan")
-                cmap = sns.diverging_palette(240, 10, as_cmap=True)
+                cmap = sns.color_palette("viridis", as_cmap=True)
                 sns.heatmap(
                     joint_counts,
                     cmap=cmap,
@@ -90,9 +89,8 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
                 )
                 ax.set_xlabel(label_j)
                 ax.set_ylabel(label_i)
-                ax.set_title(f"{label_i} vs {label_j}")
+                ax.set_title("")
 
-    fig.suptitle("Challenge 1: Label correlations & distributions", fontsize=16, y=1.02)
     fig.tight_layout()
     fig.savefig(output_path / "challenge1_correlations.png", dpi=300)
     plt.close(fig)

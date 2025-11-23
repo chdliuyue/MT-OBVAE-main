@@ -21,17 +21,17 @@ def plot_joint_kde(
     """Plot a 2D kernel density estimation for a pair of key features."""
 
     x_col, y_col = feature_pair
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(9, 7))
     sns.kdeplot(
         data=feature_df,
         x=x_col,
         y=y_col,
         fill=True,
         thresh=0.05,
-        cmap="crest",
+        cmap="mako",
         ax=ax,
     )
-    ax.set_title(f"Challenge 3: KDE for {x_col} vs {y_col} ({subset_name})")
+    ax.set_title(f"Challenge 3: KDE for {x_col} vs {y_col} ({subset_name})", pad=14)
     ax.set_xlabel(x_col)
     ax.set_ylabel(y_col)
     fig.tight_layout()
@@ -67,7 +67,7 @@ def plot_pairwise_kde_grid(feature_df: pd.DataFrame, output_dir: Path) -> Path:
     if len(data) > max_rows:
         data = data.sample(n=max_rows, random_state=42)
     data = data.reset_index(drop=True)
-    grid = sns.PairGrid(data, corner=True, diag_sharey=False)
+    grid = sns.PairGrid(data, corner=True, diag_sharey=False, height=2.8, aspect=1.05)
     grid.map_lower(
         lambda x, y, **kwargs: sns.kdeplot(
             x=x,
@@ -81,7 +81,7 @@ def plot_pairwise_kde_grid(feature_df: pd.DataFrame, output_dir: Path) -> Path:
     )
     grid.map_diag(_annotated_hist)
 
-    grid.fig.subplots_adjust(top=0.95)
+    grid.fig.subplots_adjust(top=0.93, left=0.05, right=0.98)
     grid.fig.suptitle("Challenge 3: Pairwise KDE across all features", fontsize=18)
 
     output_path = output_dir / "challenge3_pairwise_kde.png"
