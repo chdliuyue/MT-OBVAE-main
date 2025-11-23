@@ -63,7 +63,7 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     fig, axes = plt.subplots(
         n_labels,
         n_labels,
-        figsize=(8, 6),
+        figsize=(12, 8),
         constrained_layout=True,
     )
     diag_palette = sns.color_palette("viridis", n_labels)
@@ -81,6 +81,9 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
                 ax.set_xlabel(label_i)
                 ax.set_ylabel("Count")
                 ax.set_xticks(counts.index)
+                ax.set_yticks([0, 10000, 20000])
+                max_count = max(counts.values.max() if not counts.empty else 0, 20000)
+                ax.set_ylim(0, max_count * 1.05)
             else:
                 joint_counts = pd.crosstab(label_df[label_i], label_df[label_j]).astype(float)
                 if 0 in joint_counts.index and 0 in joint_counts.columns:
@@ -130,20 +133,28 @@ def plot_label_similarity_heatmap(label_df: pd.DataFrame, output_path: Path) -> 
     similarity_matrix = cosine_similarity(label_df.T)
     sim_df = pd.DataFrame(similarity_matrix, index=label_df.columns, columns=label_df.columns)
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.heatmap(
+    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
+    heatmap = sns.heatmap(
         sim_df,
         annot=True,
         fmt=".3f",
         cmap="viridis",
         square=True,
-        cbar_kws={"shrink": 0.8},
+        cbar=False,
         linewidths=0.5,
         linecolor="white",
         ax=ax,
     )
-    ax.set_title("Label similarity matrix (cosine)")
-    fig.tight_layout()
+    cbar = fig.colorbar(
+        heatmap.collections[0],
+        ax=ax,
+        fraction=0.046,
+        pad=0.04,
+        orientation="vertical",
+    )
+    cbar.set_label("Cosine similarity")
+    cbar.set_ticks(np.linspace(0, 1, 5))
+    ax.set_title("")
 
     output_file = output_path / "challenge1_label_similarity.png"
     fig.savefig(output_file, dpi=300)

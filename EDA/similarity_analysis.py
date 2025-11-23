@@ -190,17 +190,10 @@ def plot_pair_comparison(
     fig.legend(
         handles,
         labels,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.04),
+        loc="lower left",
+        bbox_to_anchor=(0.0, -0.08),
         ncol=2,
         frameon=False,
-    )
-
-    fig.suptitle(
-        "Challenge 2: Top high-similarity pairs ranked by label gap\n"
-        f"Pair {pair_id}: sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f} (indices from merged dataset)",
-        fontsize=14,
-        y=1.02,
     )
 
     output_path = output_dir / f"challenge2_radar_pair_{pair_id}.png"
