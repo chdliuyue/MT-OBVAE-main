@@ -90,9 +90,9 @@ def find_divergent_pairs(
                 )
                 seen.add(pair)
                 if len(candidates) >= max_pairs:
-                    return sorted(candidates, key=lambda p: (-p.similarity, -p.label_gap))
+                    return sorted(candidates, key=lambda p: (-p.label_gap, -p.similarity))
 
-    return sorted(candidates, key=lambda p: (-p.similarity, -p.label_gap))
+    return sorted(candidates, key=lambda p: (-p.label_gap, -p.similarity))
 
 
 def _radar_factory(num_vars: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -137,20 +137,19 @@ def plot_pair_comparison(
     ax_radar.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=8)
     ax_radar.set_title("Feature similarity (radar, normalized 0-1)")
     ax_radar.set_ylim(0, 1)
-    ax_radar.legend(loc="upper right", bbox_to_anchor=(1.3, 1.05))
 
     # Bar chart for labels
     ax_bar = fig.add_subplot(grid[0, 1])
     positions = np.arange(len(label_cols))
     width = 0.35
-    ax_bar.bar(
+    bars_a = ax_bar.bar(
         positions - width / 2,
         labels_a,
         width=width,
         label=f"Anchor idx {pair.anchor_index}",
         color=PALETTE[1],
     )
-    ax_bar.bar(
+    bars_b = ax_bar.bar(
         positions + width / 2,
         labels_b,
         width=width,
@@ -160,15 +159,28 @@ def plot_pair_comparison(
     )
     ax_bar.set_xticks(positions, label_cols)
     ax_bar.set_ylabel("Label level")
-    ax_bar.set_title("Label divergence")
-    ax_bar.legend()
+    ax_bar.set_title("Label divergence (higher = riskier)")
+
+    for bar_a, bar_b in zip(bars_a, bars_b):
+        ax_bar.text(bar_a.get_x() + bar_a.get_width() / 2, bar_a.get_height() + 0.05, f"{bar_a.get_height():.1f}", ha="center", va="bottom", fontsize=9)
+        ax_bar.text(bar_b.get_x() + bar_b.get_width() / 2, bar_b.get_height() + 0.05, f"{bar_b.get_height():.1f}", ha="center", va="bottom", fontsize=9)
+        delta = bar_b.get_height() - bar_a.get_height()
+        midpoint = (bar_a.get_x() + bar_b.get_x() + bar_b.get_width()) / 2
+        ax_bar.text(midpoint, max(bar_a.get_height(), bar_b.get_height()) + 0.15, f"Δ={delta:.1f}", ha="center", va="bottom", fontsize=9, color="gray")
+
+    handles, labels = [], []
+    for ax in (ax_radar, ax_bar):
+        h, l = ax.get_legend_handles_labels()
+        handles.extend(h)
+        labels.extend(l)
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=2)
 
     fig.suptitle(
-        f"Challenge 2: Divergent outcomes (sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f})\n"
-        "Indices refer to merged train/test rows",
+        "Challenge 2: Top high-similarity pairs ranked by label gap\n"
+        f"Pair {pair_id}: sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f} (indices from merged dataset)",
         fontsize=14,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
 
     output_path = output_dir / f"challenge2_radar_pair_{pair_id}.png"
     fig.savefig(output_path, dpi=300)

@@ -24,7 +24,13 @@ def parse_args() -> argparse.Namespace:
         "--data-root",
         type=Path,
         default=Path("data/highD_ratio_20"),
-        help="Directory containing train_old.csv and test_old.csv for the target dataset",
+        help="Directory containing the target dataset splits",
+    )
+    parser.add_argument(
+        "--split-version",
+        choices=["current", "legacy"],
+        default="legacy",
+        help="Select which train/test pair to merge for analysis (current: train.csv/test.csv, legacy: train_old.csv/test_old.csv)",
     )
     parser.add_argument(
         "--output-root",
@@ -73,6 +79,7 @@ def parse_args() -> argparse.Namespace:
 def write_report(
     output_dir: Path,
     dataset_name: str,
+    split_version: str,
     correlation_paths: Path,
     pair_summary: Path | None,
     pair_plots: List[Path],
@@ -85,8 +92,10 @@ def write_report(
     pair_section = "\n".join([f"- {p.name}" for p in pair_plots]) if pair_plots else "- (no qualifying pairs found)"
     pair_summary_line = pair_summary.name if pair_summary else "(no qualifying pairs found)"
 
+    split_label = "train.csv + test.csv" if split_version == "current" else "train_old.csv + test_old.csv"
+
     report_content = f"""
-# EDA outputs for {dataset_name} (merged train_old + test_old)
+# EDA outputs for {dataset_name} (merged {split_label})
 
 Generated artifacts are stored under: `{output_dir}`.
 
@@ -111,8 +120,8 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
     output_dir = args.output_root
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading merged dataset from %s", args.data_root)
-    features, labels = data_loader.load_full_dataset(args.data_root)
+    logger.info("Loading merged dataset from %s (%s splits)", args.data_root, args.split_version)
+    features, labels = data_loader.load_full_dataset(args.data_root, split_version=args.split_version)
 
     corr_dir = output_dir
     _ = plot_label_relationships(labels, corr_dir, method=args.correlation_method)
@@ -145,6 +154,7 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
     write_report(
         output_dir,
         dataset_name,
+        args.split_version,
         corr_dir,
         pair_summary_path,
         pair_plots,

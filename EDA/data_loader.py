@@ -53,13 +53,16 @@ def load_training_split(data_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     return feature_df, label_df
 
 
-def load_full_dataset(data_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Load and combine the legacy train/test splits for a unified EDA run.
+def load_full_dataset(data_dir: Path, split_version: str = "legacy") -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Load and combine train/test splits for a unified EDA run.
 
     Parameters
     ----------
     data_dir:
-        Directory that contains ``train_old.csv`` and ``test_old.csv``.
+        Directory that contains the desired train/test CSVs.
+    split_version:
+        Which pair of splits to merge. Use ``"current"`` for ``train.csv`` +
+        ``test.csv`` or ``"legacy"`` for ``train_old.csv`` + ``test_old.csv``.
 
     Returns
     -------
@@ -67,8 +70,15 @@ def load_full_dataset(data_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         Feature and label dataframes spanning the merged splits.
     """
 
-    train_path = data_dir / "train_old.csv"
-    test_path = data_dir / "test_old.csv"
+    if split_version == "current":
+        train_name, test_name = "train.csv", "test.csv"
+    elif split_version == "legacy":
+        train_name, test_name = "train_old.csv", "test_old.csv"
+    else:
+        raise ValueError("split_version must be 'current' or 'legacy'")
+
+    train_path = data_dir / train_name
+    test_path = data_dir / test_name
     for path in (train_path, test_path):
         if not path.exists():
             raise FileNotFoundError(f"Expected dataset split at {path}")
