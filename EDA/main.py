@@ -9,7 +9,12 @@ from . import data_loader
 from .correlation_analysis import plot_label_relationships, plot_label_similarity_heatmap
 from .data_loader import FEATURE_COLUMNS
 from .kde_analysis import compute_shape_metrics, plot_pairwise_kde_panels, save_metrics
-from .similarity_analysis import find_divergent_pairs, plot_pair_comparison, save_pair_summary
+from .similarity_analysis import (
+    find_divergent_pairs,
+    plot_pair_comparison,
+    plot_radar_grid,
+    save_pair_summary,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,6 +88,7 @@ def write_report(
     correlation_paths: Path,
     pair_summary: Path | None,
     pair_plots: List[Path],
+    radar_grid: Path | None,
     pairwise_kde_paths: List[Path],
     metrics_path: Path,
     similarity_map: Path,
@@ -93,6 +99,8 @@ def write_report(
     kde_section = "\n".join([f"- {p.name}" for p in pairwise_kde_paths]) if pairwise_kde_paths else "- (not generated)"
 
     split_label = "train.csv + test.csv" if split_version == "current" else "train_old.csv + test_old.csv"
+
+    radar_line = radar_grid.name if radar_grid else "(no qualifying pairs found)"
 
     report_content = f"""
 # EDA outputs for {dataset_name} (merged {split_label})
@@ -106,6 +114,7 @@ Generated artifacts are stored under: `{output_dir}`.
 ## Challenge 2: Similar features, divergent outcomes
 - Pair summary: {pair_summary_line}
 - Pair visuals:\n{pair_section}
+- Combined radar grid (top pairs): {radar_line}
 
 ## Challenge 3: Key feature KDE & tail statistics
 - Pairwise KDE panels (all feature combinations):\n{kde_section}
@@ -136,11 +145,13 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
         neighbor_count=args.neighbor_count,
     )
     pair_plots: List[Path] = []
+    radar_grid_path: Path | None = None
     pair_summary_path: Path | None = None
     if pairs:
         pair_summary_path = save_pair_summary(pairs, output_dir)
         for idx, pair in enumerate(pairs, start=1):
             pair_plots.append(plot_pair_comparison(features, labels, pair, output_dir, idx))
+        radar_grid_path = plot_radar_grid(features, pairs, output_dir)
         logger.info("Identified %d divergent pairs", len(pairs))
     else:
         logger.warning("No divergent pairs found with current thresholds")
@@ -156,6 +167,7 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
         corr_dir,
         pair_summary_path,
         pair_plots,
+        radar_grid_path,
         pairwise_kde_paths,
         metrics_path,
         similarity_map,
