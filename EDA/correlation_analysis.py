@@ -61,7 +61,10 @@ def plot_label_relationships(label_df: pd.DataFrame, output_path: Path, method: 
     labels = list(label_df.columns)
     n_labels = len(labels)
     fig, axes = plt.subplots(
-        n_labels, n_labels, figsize=(4 * n_labels, 4 * n_labels), constrained_layout=True
+        n_labels,
+        n_labels,
+        figsize=(8, 6),
+        constrained_layout=True,
     )
     diag_palette = sns.color_palette("viridis", n_labels)
     zero_color = "#f0f0f0"

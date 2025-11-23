@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-pairs",
         type=int,
-        default=10,
+        default=50,
         help="Maximum number of divergent pairs to visualize",
     )
     parser.add_argument(
