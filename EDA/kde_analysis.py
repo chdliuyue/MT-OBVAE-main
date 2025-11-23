@@ -65,11 +65,11 @@ def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List
     for ax in grid.axes.flatten():
         if ax is None:
             continue
-        ax.tick_params(axis="both", labelsize=7, labelbottom=True, labelleft=True)
+        ax.tick_params(axis="both", labelbottom=False, labelleft=False, bottom=False, left=False)
+        ax.set_xlabel("")
+        ax.set_ylabel("")
     grid.fig.set_size_inches(max(12, 2.6 * data.shape[1] * 0.65), max(12, 2.6 * data.shape[1] * 0.65))
-    grid.fig.tight_layout(rect=[0, 0, 1, 0.96])
-    grid.fig.subplots_adjust(top=0.95)
-    grid.fig.suptitle("Challenge 3: Pairwise KDE overview (lower triangle)", fontsize=14)
+    grid.fig.tight_layout()
 
     combined_path = output_dir / "challenge3_pairwise_kde_overview.png"
     grid.savefig(combined_path, dpi=300)
