@@ -1,93 +1,51 @@
 from __future__ import annotations
 
+from itertools import combinations
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Iterable, List, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from matplotlib.offsetbox import AnchoredText
 from scipy import stats
 
 sns.set_theme(style="white", context="talk")
 
 
-def plot_joint_kde(
-    feature_df: pd.DataFrame,
-    feature_pair: Tuple[str, str],
-    output_dir: Path,
-    subset_name: str,
-) -> Path:
-    """Plot a 2D kernel density estimation for a pair of key features."""
-
-    x_col, y_col = feature_pair
-    fig, ax = plt.subplots(figsize=(9, 7))
-    sns.kdeplot(
-        data=feature_df,
-        x=x_col,
-        y=y_col,
-        fill=True,
-        thresh=0.05,
-        cmap="mako",
-        ax=ax,
-    )
-    ax.set_title(f"Challenge 3: KDE for {x_col} vs {y_col} ({subset_name})", pad=14)
-    ax.set_xlabel(x_col)
-    ax.set_ylabel(y_col)
-    fig.tight_layout()
-
-    output_path = output_dir / "challenge3_kde.png"
-    fig.savefig(output_path, dpi=300)
-    plt.close(fig)
-    return output_path
-
-
-def _annotated_hist(x, color, label=None, **kwargs):
-    ax = plt.gca()
-    series = pd.Series(x).dropna()
-    sns.histplot(series, bins="auto", color=color, edgecolor="white", alpha=0.8, ax=ax)
-    skewness = stats.skew(series)
-    kurtosis = stats.kurtosis(series, fisher=False)
-    annotation = AnchoredText(
-        f"skew={skewness:.2f}\nkurt={kurtosis:.2f}",
-        loc="upper right",
-        frameon=True,
-        prop={"size": 9},
-    )
-    annotation.patch.set_alpha(0.8)
-    ax.add_artist(annotation)
-    ax.set_ylabel("Count")
-
-
-def plot_pairwise_kde_grid(feature_df: pd.DataFrame, output_dir: Path) -> Path:
-    """Render KDE pairwise relationships for all feature combinations."""
+def plot_pairwise_kde_panels(feature_df: pd.DataFrame, output_dir: Path) -> List[Path]:
+    """Render KDE plots for every feature pair as standalone figures."""
 
     max_rows = 2000
     data = feature_df.copy()
     if len(data) > max_rows:
         data = data.sample(n=max_rows, random_state=42)
     data = data.reset_index(drop=True)
-    grid = sns.PairGrid(data, corner=True, diag_sharey=False, height=2.8, aspect=1.05)
-    grid.map_lower(
-        lambda x, y, **kwargs: sns.kdeplot(
-            x=x,
-            y=y,
+
+    output_paths: List[Path] = []
+    for x_col, y_col in combinations(data.columns, 2):
+        fig, ax = plt.subplots(figsize=(6.4, 5.4))
+        sns.kdeplot(
+            data=data,
+            x=x_col,
+            y=y_col,
             fill=True,
-            thresh=0.02,
-            levels=20,
-            cmap="mako",
-            **kwargs,
+            thresh=0.03,
+            levels=25,
+            cmap="magma",
+            linewidths=0.6,
+            ax=ax,
         )
-    )
-    grid.map_diag(_annotated_hist)
+        ax.set_title(f"Challenge 3: KDE for {x_col} vs {y_col}", pad=12)
+        ax.set_xlabel(x_col)
+        ax.set_ylabel(y_col)
+        fig.tight_layout()
 
-    grid.fig.subplots_adjust(top=0.93, left=0.05, right=0.98)
-    grid.fig.suptitle("Challenge 3: Pairwise KDE across all features", fontsize=18)
+        output_path = output_dir / f"challenge3_pairwise_kde_{x_col}_vs_{y_col}.png"
+        fig.savefig(output_path, dpi=300)
+        plt.close(fig)
+        output_paths.append(output_path)
 
-    output_path = output_dir / "challenge3_pairwise_kde.png"
-    grid.fig.savefig(output_path, dpi=300)
-    plt.close(grid.fig)
-    return output_path
+    return output_paths
 
 
 def compute_shape_metrics(feature_df: pd.DataFrame, key_features: Iterable[str]) -> pd.DataFrame:

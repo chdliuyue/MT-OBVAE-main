@@ -8,7 +8,7 @@ from typing import List
 from . import data_loader
 from .correlation_analysis import plot_label_relationships, plot_label_similarity_heatmap
 from .data_loader import FEATURE_COLUMNS
-from .kde_analysis import compute_shape_metrics, plot_joint_kde, plot_pairwise_kde_grid, save_metrics
+from .kde_analysis import compute_shape_metrics, plot_pairwise_kde_panels, save_metrics
 from .similarity_analysis import find_divergent_pairs, plot_pair_comparison, save_pair_summary
 
 
@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-pairs",
         type=int,
-        default=3,
+        default=10,
         help="Maximum number of divergent pairs to visualize",
     )
     parser.add_argument(
@@ -83,14 +83,14 @@ def write_report(
     correlation_paths: Path,
     pair_summary: Path | None,
     pair_plots: List[Path],
-    kde_path: Path,
-    pairwise_kde_path: Path,
+    pairwise_kde_paths: List[Path],
     metrics_path: Path,
     similarity_map: Path,
 ) -> None:
     report_path = output_dir / "eda_report.md"
     pair_section = "\n".join([f"- {p.name}" for p in pair_plots]) if pair_plots else "- (no qualifying pairs found)"
     pair_summary_line = pair_summary.name if pair_summary else "(no qualifying pairs found)"
+    kde_section = "\n".join([f"- {p.name}" for p in pairwise_kde_paths]) if pairwise_kde_paths else "- (not generated)"
 
     split_label = "train.csv + test.csv" if split_version == "current" else "train_old.csv + test_old.csv"
 
@@ -108,8 +108,7 @@ Generated artifacts are stored under: `{output_dir}`.
 - Pair visuals:\n{pair_section}
 
 ## Challenge 3: Key feature KDE & tail statistics
-- KDE plot (UF vs UAS): {kde_path.name}
-- Pairwise KDE grid: {pairwise_kde_path.name}
+- Pairwise KDE panels (all feature combinations):\n{kde_section}
 - Skewness/kurtosis table: {metrics_path.name}
 """
     report_path.write_text(report_content.strip() + "\n", encoding="utf-8")
@@ -146,8 +145,7 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
     else:
         logger.warning("No divergent pairs found with current thresholds")
 
-    kde_path = plot_joint_kde(features, ("UF", "UAS"), output_dir, dataset_name)
-    pairwise_kde_path = plot_pairwise_kde_grid(features[FEATURE_COLUMNS], output_dir)
+    pairwise_kde_paths = plot_pairwise_kde_panels(features[FEATURE_COLUMNS], output_dir)
     metrics_df = compute_shape_metrics(features, FEATURE_COLUMNS)
     metrics_path = save_metrics(metrics_df, output_dir)
 
@@ -158,8 +156,7 @@ def run_full_pipeline(args: argparse.Namespace, logger: logging.Logger) -> None:
         corr_dir,
         pair_summary_path,
         pair_plots,
-        kde_path,
-        pairwise_kde_path,
+        pairwise_kde_paths,
         metrics_path,
         similarity_map,
     )

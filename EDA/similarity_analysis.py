@@ -14,10 +14,10 @@ from sklearn.preprocessing import StandardScaler
 from .data_loader import FEATURE_COLUMNS, LABEL_COLUMNS
 
 
-ANCHOR_COLOR = "#1b9e77"  # nature-inspired teal
-NEIGHBOR_COLOR = "#d95f02"  # nature-inspired orange
-ANCHOR_BAR_COLOR = "#66c2a5"  # lighter teal for bars
-NEIGHBOR_BAR_COLOR = "#fc8d62"  # lighter orange for bars
+ANCHOR_COLOR = "#1f78b4"  # deep blue for clear contrast
+NEIGHBOR_COLOR = "#e31a1c"  # vivid red to stand apart from blue
+ANCHOR_BAR_COLOR = "#a6cee3"  # light blue for bars
+NEIGHBOR_BAR_COLOR = "#fcae91"  # warm coral for bars
 
 
 @dataclass
@@ -35,7 +35,7 @@ def find_divergent_pairs(
     label_df: pd.DataFrame,
     similarity_threshold: float = 0.95,
     min_label_gap: float = 2.0,
-    max_pairs: int = 3,
+    max_pairs: int = 10,
     neighbor_count: int = 25,
 ) -> List[DivergentPair]:
     """Find sample pairs with high feature similarity but distinct labels.
@@ -126,8 +126,8 @@ def plot_pair_comparison(
 
     angles, _ = _radar_factory(len(feature_cols))
 
-    fig = plt.figure(figsize=(12, 6))
-    grid = fig.add_gridspec(1, 2, width_ratios=[2, 1])
+    fig = plt.figure(figsize=(10, 5.5))
+    grid = fig.add_gridspec(1, 2, width_ratios=[1.8, 1], wspace=0.18)
 
     # Radar chart for features
     ax_radar = fig.add_subplot(grid[0, 0], polar=True)
@@ -137,7 +137,7 @@ def plot_pair_comparison(
     ax_radar.fill(angles, values_a, alpha=0.18, color=ANCHOR_COLOR)
     ax_radar.plot(angles, values_b, label=f"Neighbor idx {pair.neighbor_index}", color=NEIGHBOR_COLOR, linewidth=2)
     ax_radar.fill(angles, values_b, alpha=0.18, color=NEIGHBOR_COLOR)
-    ax_radar.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=8)
+    ax_radar.set_thetagrids(angles[:-1] * 180 / np.pi, labels=feature_cols, fontsize=9)
     ax_radar.set_title("Feature similarity (radar, normalized 0-1)")
     ax_radar.set_ylim(0, 1)
 
@@ -164,30 +164,32 @@ def plot_pair_comparison(
     ax_bar.set_ylabel("Label level")
     ax_bar.set_title("Label divergence (higher = riskier)")
     ax_bar.set_yticks(np.arange(0, 4, 1))
+    ax_bar.tick_params(axis="x", labelrotation=15, labelsize=10)
 
     y_max = max(np.max(labels_a), np.max(labels_b)) if len(labels_a) and len(labels_b) else 3
     ax_bar.set_ylim(0, max(3.2, y_max + 0.4))
 
     for bar_a, bar_b in zip(bars_a, bars_b):
-        ax_bar.text(bar_a.get_x() + bar_a.get_width() / 2, bar_a.get_height() + 0.05, f"{bar_a.get_height():.0f}", ha="center", va="bottom", fontsize=9)
-        ax_bar.text(bar_b.get_x() + bar_b.get_width() / 2, bar_b.get_height() + 0.05, f"{bar_b.get_height():.0f}", ha="center", va="bottom", fontsize=9)
+        ax_bar.text(bar_a.get_x() + bar_a.get_width() / 2, bar_a.get_height() + 0.05, f"{bar_a.get_height():.0f}", ha="center", va="bottom", fontsize=11)
+        ax_bar.text(bar_b.get_x() + bar_b.get_width() / 2, bar_b.get_height() + 0.05, f"{bar_b.get_height():.0f}", ha="center", va="bottom", fontsize=11)
         delta = bar_b.get_height() - bar_a.get_height()
         midpoint = (bar_a.get_x() + bar_b.get_x() + bar_b.get_width()) / 2
-        ax_bar.text(midpoint, max(bar_a.get_height(), bar_b.get_height()) + 0.15, f"Δ={delta:.1f}", ha="center", va="bottom", fontsize=9, color="gray")
+        ax_bar.text(midpoint, max(bar_a.get_height(), bar_b.get_height()) + 0.15, f"Δ={delta:.1f}", ha="center", va="bottom", fontsize=10, color="#4b4b4b")
 
     handles, labels = [], []
     for ax in (ax_radar, ax_bar):
         h, l = ax.get_legend_handles_labels()
         handles.extend(h)
         labels.extend(l)
-    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.02), ncol=2, frameon=False)
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.98), ncol=2, frameon=False)
 
     fig.suptitle(
         "Challenge 2: Top high-similarity pairs ranked by label gap\n"
         f"Pair {pair_id}: sim={pair.similarity:.3f}, label gap={pair.label_gap:.1f} (indices from merged dataset)",
         fontsize=14,
+        y=1.02,
     )
-    fig.tight_layout(rect=[0, 0.08, 1, 0.92])
+    fig.tight_layout(rect=[0, 0.04, 1, 0.95])
 
     output_path = output_dir / f"challenge2_radar_pair_{pair_id}.png"
     fig.savefig(output_path, dpi=300)
