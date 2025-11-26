@@ -299,6 +299,50 @@ def evaluate_model_mt_obvae(model, X_test, y_test, num_samples=100):
     return metrics
 
 
+def metrics_to_dataframe(metrics):
+    rows = []
+    for m in metrics:
+        rows.append({
+            "task": m.task,
+            "accuracy": m.accuracy,
+            "f1_score": m.f1_score,
+            "qwk": m.qwk,
+            "ordmae": m.ordmae,
+            "nll": m.nll,
+            "brier": m.brier,
+            "auroc": m.auroc,
+            "brdece": m.brdece,
+        })
+    return pd.DataFrame(rows)
+
+
+def summarize_metric_runs(metric_runs):
+    frames = []
+    for idx, run in enumerate(metric_runs, start=1):
+        df = metrics_to_dataframe(run).copy()
+        df.insert(0, "run", idx)
+        frames.append(df)
+
+    combined = pd.concat(frames, ignore_index=True)
+    metric_cols = [col for col in combined.columns if col not in {"task", "run"}]
+    summary = combined.groupby("task")[metric_cols].agg(['mean', 'std'])
+    summary.columns = [f"{metric}_{stat}" for metric, stat in summary.columns]
+    summary = summary.reset_index()
+    return combined, summary
+
+
+def select_representative_high_risk_samples(y_labels: np.ndarray, top_k: int = 5) -> list[int]:
+    """选择三种风险指标均为高风险的代表性样本索引。"""
+
+    severe_mask = (y_labels >= 2).sum(axis=1) == y_labels.shape[1]
+    severe_indices = np.where(severe_mask)[0]
+    if len(severe_indices) == 0:
+        scores = y_labels.sum(axis=1)
+        severe_indices = np.argsort(-scores)
+
+    return severe_indices[:top_k].tolist()
+
+
 
 # 5. 主函数
 def main():
@@ -320,8 +364,13 @@ def main():
     ap.add_argument("--kl_weight", type=float, default=0.01, help="隐空间KL损失的最终权重")
     ap.add_argument("--anneal_portion", type=float, default=0.5, help="KL退火周期占比")
     ap.add_argument("--density_feature", default=None, help="用于相空间分色的密度特征名")
-    ap.add_argument("--uncertainty_indices", default="0", help="逗号分隔的样本索引用于不确定性可视化")
+    ap.add_argument("--embedding_method", default="tsne", choices=["tsne", "umap", "both"], help="冲突相空间降维方式")
+    ap.add_argument("--embedding_perplexity", type=int, default=30, help="t-SNE困惑度/邻域大小")
+    ap.add_argument("--uncertainty_indices", default="", help="逗号分隔的样本索引用于不确定性可视化，留空自动选择")
+    ap.add_argument("--uncertainty_top_k", type=int, default=5, help="自动选择高风险样本的数量")
     ap.add_argument("--uncertainty_mc_samples", type=int, default=100, help="不确定性可视化时的MC采样次数")
+    ap.add_argument("--eval_mc_samples", type=int, default=50, help="评估时的蒙特卡洛采样次数")
+    ap.add_argument("--eval_runs", type=int, default=3, help="重复评估次数以统计均值和标准差")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -339,16 +388,25 @@ def main():
                                  kl_latent_final_weight=args.kl_weight,
                                  anneal_portion=args.anneal_portion)
 
-    # 评估模型
-    metrics = evaluate_model_mt_obvae(model, X_test, y_test, num_samples=50)
+    # 评估模型（多次运行以统计均值和标准差）
+    metric_runs = []
+    for eval_idx in range(args.eval_runs):
+        print(f"\n评估轮次 {eval_idx + 1}/{args.eval_runs}")
+        metrics = evaluate_model_mt_obvae(model, X_test, y_test, num_samples=args.eval_mc_samples)
+        metric_runs.append(metrics)
+
+    per_run_df, summary_df = summarize_metric_runs(metric_runs)
+    print("\n多次评估均值与标准差：")
+    print(summary_df.to_string(index=False))
 
     # 保存评估结果
     results_file = os.path.join(args.out_dir, "evaluation_results.txt")
     with open(results_file, 'w') as f:
-        # 手动写入表头
         f.write("Task,Accuracy,F1,QWK,OrdMAE,NLL,Brier,AUROC,BrdECE\n")
-        # 调用函数获取结果字符串，不再传递header参数
-        f.write(format_results_table(metrics))
+        f.write(format_results_table(metric_runs[0]))
+        f.write("\n\nMean/Std over runs (csv format stored separately)")
+    per_run_df.to_csv(os.path.join(args.out_dir, "evaluation_runs.csv"), index=False)
+    summary_df.to_csv(os.path.join(args.out_dir, "evaluation_summary.csv"), index=False)
     print(f"评估结果已保存至 {results_file}")
 
     # --- 运行并保存所有交通机理分析接口的结果 ---
@@ -364,9 +422,31 @@ def main():
     print("隐空间数据预览:")
     print(latent_space_df.head())
 
-    # 接口 3: 对单个样本进行不确定性分解
+    # 生成冲突相空间可视化与风险模糊度分析
+    generate_phase_space(
+        latent_space_df_path,
+        args.out_dir,
+        density_feature=args.density_feature,
+        prefix="2_",
+        embedding_method=args.embedding_method,
+        perplexity=args.embedding_perplexity,
+    )
+
+    # 接口 3: 风险敏感性剖面与触发机制解耦
+    decoder_weights = extract_decoder_sensitivities(model)
+    sensitivities_file = os.path.join(args.out_dir, "3_decoder_sensitivities.npz")
+    np.savez(sensitivities_file, **decoder_weights)
+    visualize_decoder_sensitivities(sensitivities_file, args.out_dir, prefix="3_", sort_dimensions=False)
+    print(f"\n接口3: 解码器敏感性权重已保存至 {sensitivities_file}")
+    for task, weights in decoder_weights.items():
+        print(f"--- 任务: {task}, 权重形状: {weights.shape} ---")
+
+    # 接口 4: 认知不确定性与可靠性感知预警
     index_list = [int(idx.strip()) for idx in args.uncertainty_indices.split(',') if idx.strip().isdigit()]
     index_list = [idx for idx in index_list if 0 <= idx < len(X_test)]
+    if not index_list:
+        index_list = select_representative_high_risk_samples(y_test, top_k=args.uncertainty_top_k)
+
     if index_list:
         uncertainty_results = visualize_uncertainty_cases(
             model,
@@ -375,7 +455,7 @@ def main():
             args.out_dir,
             num_mc_samples=args.uncertainty_mc_samples,
         )
-        uncertainty_json = os.path.join(args.out_dir, "3_uncertainty_cases.json")
+        uncertainty_json = os.path.join(args.out_dir, "4_uncertainty_cases.json")
         with open(uncertainty_json, "w", encoding="utf-8") as f:
             json.dump(uncertainty_results, f, indent=2, ensure_ascii=False)
 
@@ -393,23 +473,10 @@ def main():
                     row[f"predictive_mean_class{i}"] = prob
                 flattened_rows.append(row)
 
-        pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "3_uncertainty_cases.csv"), index=False)
-        print(f"\n接口3: 不确定性案例分析结果已保存至 {uncertainty_json}")
+        pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "4_uncertainty_cases.csv"), index=False)
+        print(f"\n接口4: 不确定性案例分析结果已保存至 {uncertainty_json}")
     else:
-        print("未提供有效的样本索引，跳过不确定性可视化。")
-
-    # 接口 4: 提取解码器敏感性
-    decoder_weights = extract_decoder_sensitivities(model)
-    sensitivities_file = os.path.join(args.out_dir, "4_decoder_sensitivities.npz")
-    # 使用np.savez保存多个数组到一个文件
-    np.savez(sensitivities_file, **decoder_weights)
-    visualize_decoder_sensitivities(sensitivities_file, args.out_dir, prefix="4_")
-    print(f"\n接口4: 解码器敏感性权重已保存至 {sensitivities_file}")
-    for task, weights in decoder_weights.items():
-        print(f"--- 任务: {task}, 权重形状: {weights.shape} ---")
-
-    # 生成冲突相空间可视化与风险模糊度分析
-    generate_phase_space(latent_space_df_path, args.out_dir, density_feature=args.density_feature, prefix="2_")
+        print("未找到满足条件的高风险样本，跳过不确定性可视化。")
 
 
 if __name__ == "__main__":
