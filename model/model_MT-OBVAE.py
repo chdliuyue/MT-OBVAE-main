@@ -14,6 +14,10 @@ from blitz.modules import BayesianLinear
 from blitz.utils import variational_estimator
 
 from module.metrics import evaluate_multitask_predictions, format_results_table
+from module.phase_space import generate_phase_space
+from module.sensitivity_profile import visualize_decoder_sensitivities
+from module.training_monitor import TrainingMonitor
+from module.uncertainty_viz import visualize_uncertainty_cases
 
 # --- 项目路径设置 ---
 # 假设您的代码文件在 model 文件夹下，而 module 文件夹与 model 在同一级目录
@@ -176,6 +180,7 @@ def train_mt_obvae_model(X_train, y_train, output_dir,
     训练MT-OBVAE模型的主函数。
     【核心优化】: 不在总损失中显式添加权重KL项，只对隐空间KL损失进行退火。
     """
+    os.makedirs(output_dir, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_dim = X_train.shape[1]
 
@@ -188,6 +193,8 @@ def train_mt_obvae_model(X_train, y_train, output_dir,
 
     # 计算退火结束的epoch数
     anneal_epochs = int(num_epochs * anneal_portion)
+
+    monitor = TrainingMonitor(output_dir)
 
     print(f"开始训练 MT-OBVAE 模型... 设备: {device}")
     for epoch in range(num_epochs):
@@ -230,13 +237,18 @@ def train_mt_obvae_model(X_train, y_train, output_dir,
                 'KL Latent': f'{kl_latent_loss.item():.4f}'
             })
 
+        recon_mean = total_recon_epoch / len(dataloader)
+        kl_mean = total_kl_lat_epoch / len(dataloader)
+        monitor.log_epoch(epoch + 1, recon_mean, kl_mean, kl_latent_current_weight)
+
         # 打印每个epoch的平均损失
         print(f"Epoch [{epoch + 1}/{num_epochs}] | "
-              f"重构损失: {total_recon_epoch / len(dataloader):.4f} | "
-              f"隐空间KL: {total_kl_lat_epoch / len(dataloader):.4f} | "
+              f"重构损失: {recon_mean:.4f} | "
+              f"隐空间KL: {kl_mean:.4f} | "
               f"隐空间KL权重: {kl_latent_current_weight:.4f}")
-        # 增加一个保存三个值到本地的内容 *****************************
 
+
+    monitor.export()
 
     # 保存模型
     torch.save(model.state_dict(), os.path.join(output_dir, "mt_obvae.pth"))
@@ -394,6 +406,9 @@ def main():
     # VAE损失超参数
     ap.add_argument("--kl_weight", type=float, default=0.01, help="隐空间KL损失的最终权重")
     ap.add_argument("--anneal_portion", type=float, default=0.5, help="KL退火周期占比")
+    ap.add_argument("--density_feature", default=None, help="用于相空间分色的密度特征名")
+    ap.add_argument("--uncertainty_indices", default="0", help="逗号分隔的样本索引用于不确定性可视化")
+    ap.add_argument("--uncertainty_mc_samples", type=int, default=100, help="不确定性可视化时的MC采样次数")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -437,27 +452,51 @@ def main():
     print(latent_space_df.head())
 
     # 接口 3: 对单个样本进行不确定性分解
-    sample_to_analyze = X_test[100]  # 随机选择一个样本进行分析
-    uncertainty_results = predict_with_uncertainty(model, sample_to_analyze)
-    uncertainty_file = os.path.join(args.out_dir, "uncertainty_analysis_sample.json")
-    with open(uncertainty_file, 'w', encoding='utf-8') as f:
-        # 使用自定义函数处理numpy数组的JSON序列化
-        json.dump(uncertainty_results, f, indent=2,
-                  default=lambda x: x.tolist() if isinstance(x, np.ndarray) else str(x), ensure_ascii=False)
-    print(f"\n接口3: 单个样本的不确定性分析结果已保存至 {uncertainty_file}")
-    print("单个样本的不确定性分析结果:")
-    print(
-        json.dumps(uncertainty_results, indent=2, default=lambda x: x.tolist() if isinstance(x, np.ndarray) else str(x),
-                   ensure_ascii=False))
+    index_list = [int(idx.strip()) for idx in args.uncertainty_indices.split(',') if idx.strip().isdigit()]
+    index_list = [idx for idx in index_list if 0 <= idx < len(X_test)]
+    if index_list:
+        uncertainty_results = visualize_uncertainty_cases(
+            model,
+            X_test,
+            index_list,
+            args.out_dir,
+            num_mc_samples=args.uncertainty_mc_samples,
+        )
+        uncertainty_json = os.path.join(args.out_dir, "uncertainty_cases.json")
+        with open(uncertainty_json, "w", encoding="utf-8") as f:
+            json.dump(uncertainty_results, f, indent=2, ensure_ascii=False)
+
+        flattened_rows = []
+        for item in uncertainty_results:
+            for task, stats in item["summaries"].items():
+                row = {
+                    "sample_index": item["sample_index"],
+                    "aleatoric_index": item.get("aleatoric_index"),
+                    "task": task,
+                    "epistemic_variance": stats["epistemic_variance"],
+                    "mutual_information": stats["mutual_information"],
+                }
+                for i, prob in enumerate(stats["predictive_mean"]):
+                    row[f"predictive_mean_class{i}"] = prob
+                flattened_rows.append(row)
+
+        pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "uncertainty_cases.csv"), index=False)
+        print(f"\n接口3: 不确定性案例分析结果已保存至 {uncertainty_json}")
+    else:
+        print("未提供有效的样本索引，跳过不确定性可视化。")
 
     # 接口 4: 提取解码器敏感性
     decoder_weights = extract_decoder_sensitivities(model)
     sensitivities_file = os.path.join(args.out_dir, "decoder_sensitivities.npz")
     # 使用np.savez保存多个数组到一个文件
     np.savez(sensitivities_file, **decoder_weights)
+    visualize_decoder_sensitivities(sensitivities_file, args.out_dir)
     print(f"\n接口4: 解码器敏感性权重已保存至 {sensitivities_file}")
     for task, weights in decoder_weights.items():
         print(f"--- 任务: {task}, 权重形状: {weights.shape} ---")
+
+    # 生成冲突相空间可视化与风险模糊度分析
+    generate_phase_space(latent_space_df_path, args.out_dir, density_feature=args.density_feature)
 
 
 if __name__ == "__main__":
