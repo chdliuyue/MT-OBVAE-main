@@ -38,8 +38,8 @@ def extract_latent_space(model, X_data, y_data, feature_names, batch_size=256):
 
 
 def predict_with_uncertainty(model, x_sample, num_mc_samples=100):
-    """接口 3: 对单个样本进行预测，并分解不确定性"""
-    print("接口 3: 正在对单个样本进行不确定性分解...")
+    """接口 4: 对单个样本进行预测，并分解不确定性"""
+    print("接口 4: 正在对单个样本进行不确定性分解...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
     task_names = ["ttc", "drac", "psd"]
@@ -78,8 +78,8 @@ def predict_with_uncertainty(model, x_sample, num_mc_samples=100):
 
 
 def extract_decoder_sensitivities(model):
-    """接口 4: 提取解码器敏感性（beta系数网络的权重均值）"""
-    print("接口 4: 正在提取解码器敏性剖面...")
+    """接口 3: 提取解码器敏感性（beta系数网络的权重均值）"""
+    print("接口 3: 正在提取解码器敏性剖面...")
     sensitivities = {}
     task_names = ["ttc", "drac", "psd"]
 

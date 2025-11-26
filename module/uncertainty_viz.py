@@ -8,6 +8,16 @@ import torch
 import torch.nn.functional as F
 
 
+NATURE_PALETTE = [
+    "#E64B35",
+    "#4DBBD5",
+    "#00A087",
+    "#3C5488",
+    "#F39B7F",
+    "#8491B4",
+]
+
+
 def _get_device(model: torch.nn.Module) -> torch.device:
     return next(model.parameters()).device
 
@@ -56,12 +66,18 @@ def summarize_uncertainty(prob_samples: Dict[str, np.ndarray]) -> Dict[str, Dict
 
 
 def plot_probability_distributions(
-    prob_samples: Dict[str, np.ndarray], output_dir: str, prefix: str = "3_sample"
+    prob_samples: Dict[str, np.ndarray], output_dir: str, prefix: str = "4_sample"
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
     for task, samples in prob_samples.items():
         plt.figure(figsize=(7, 4))
-        plt.boxplot(samples, labels=["class0", "class1", "class2", "class3"])
+        plt.boxplot(
+            samples,
+            labels=["class0", "class1", "class2", "class3"],
+            patch_artist=True,
+            boxprops=dict(facecolor=NATURE_PALETTE[1], color=NATURE_PALETTE[3]),
+            medianprops=dict(color=NATURE_PALETTE[0]),
+        )
         plt.ylabel("Predicted probability")
         plt.title(f"MC predictive distribution - {task}")
         plt.grid(True, linestyle="--", alpha=0.5)
@@ -70,7 +86,7 @@ def plot_probability_distributions(
         plt.close()
 
         plt.figure(figsize=(7, 4))
-        plt.hist(samples.flatten(), bins=30, alpha=0.7)
+        plt.hist(samples.flatten(), bins=30, alpha=0.75, color=NATURE_PALETTE[0], edgecolor=NATURE_PALETTE[3])
         plt.xlabel("Predicted probability")
         plt.ylabel("Frequency")
         plt.title(f"Probability histogram - {task}")
@@ -100,7 +116,7 @@ def visualize_uncertainty_cases(
         summaries = summarize_uncertainty(prob_samples)
         results.append({"sample_index": idx, "aleatoric_index": aleatoric_index, "summaries": summaries})
 
-        prefix = f"3_sample_{idx}"
+        prefix = f"4_sample_{idx}"
         plot_probability_distributions(prob_samples, output_dir, prefix=prefix)
 
         json_path = os.path.join(output_dir, f"{prefix}_uncertainty.json")
