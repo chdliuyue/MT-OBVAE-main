@@ -28,7 +28,7 @@ def build_sensitivity_table(sensitivities: Dict[str, np.ndarray], sort_dimension
     return df
 
 
-def plot_heatmap(table: pd.DataFrame, output_dir: str, figsize=(7, 5)) -> None:
+def plot_heatmap(table: pd.DataFrame, output_dir: str, figsize=(7, 5), prefix: str = "4_") -> None:
     os.makedirs(output_dir, exist_ok=True)
     plt.figure(figsize=figsize)
     plt.imshow(table.values, aspect="auto", cmap="magma")
@@ -39,11 +39,11 @@ def plot_heatmap(table: pd.DataFrame, output_dir: str, figsize=(7, 5)) -> None:
     plt.ylabel("Latent dimension")
     plt.title("Decoder sensitivity profile")
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "decoder_sensitivity_heatmap.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, f"{prefix}decoder_sensitivity_heatmap.png"), dpi=300)
     plt.close()
 
 
-def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4)) -> None:
+def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4), prefix: str = "4_") -> None:
     os.makedirs(output_dir, exist_ok=True)
     num_tasks = table.shape[1]
     fig, axes = plt.subplots(1, num_tasks, figsize=figsize, sharey=True)
@@ -57,17 +57,19 @@ def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4)) -> None
         ax.set_ylabel("Normalized |beta|")
         ax.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "decoder_sensitivity_bars.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, f"{prefix}decoder_sensitivity_bars.png"), dpi=300)
     plt.close()
 
 
-def visualize_decoder_sensitivities(npz_path: str, output_dir: str, sort_dimensions: bool = True) -> pd.DataFrame:
+def visualize_decoder_sensitivities(
+    npz_path: str, output_dir: str, sort_dimensions: bool = True, prefix: str = "4_"
+) -> pd.DataFrame:
     os.makedirs(output_dir, exist_ok=True)
     sensitivities = load_sensitivities(npz_path)
     table = build_sensitivity_table(sensitivities, sort_dimensions=sort_dimensions)
-    csv_path = os.path.join(output_dir, "decoder_sensitivity_normalized.csv")
+    csv_path = os.path.join(output_dir, f"{prefix}decoder_sensitivity_normalized.csv")
     table.to_csv(csv_path)
 
-    plot_heatmap(table, output_dir)
-    plot_task_bars(table, output_dir)
+    plot_heatmap(table, output_dir, prefix=prefix)
+    plot_task_bars(table, output_dir, prefix=prefix)
     return table

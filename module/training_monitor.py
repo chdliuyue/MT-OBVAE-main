@@ -40,20 +40,28 @@ class TrainingMonitor:
             return
 
         df = self._to_dataframe()
-        plt.figure(figsize=figsize)
-        plt.plot(df["epoch"], df["recon_loss"], label="Reconstruction Loss", marker="o")
-        plt.plot(df["epoch"], df["kl_loss"], label="KL Loss", marker="o")
-        plt.plot(df["epoch"], df["kl_weight"], label="KL Weight", linestyle="--")
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss / Weight")
-        plt.title("MT-OBVAE Training Progress")
-        plt.legend()
-        plt.grid(True, linestyle="--", alpha=0.5)
-        plt.tight_layout()
+        fig, ax_loss = plt.subplots(figsize=figsize)
+
+        ax_loss.plot(df["epoch"], df["recon_loss"], label="Reconstruction Loss", marker="o")
+        ax_loss.plot(df["epoch"], df["kl_loss"], label="KL Loss", marker="o")
+        ax_loss.set_xlabel("Epoch")
+        ax_loss.set_ylabel("Loss")
+
+        ax_weight = ax_loss.twinx()
+        ax_weight.plot(df["epoch"], df["kl_weight"], label="KL Weight", linestyle="--", color="tab:green")
+        ax_weight.set_ylabel("KL Weight")
+
+        lines_loss, labels_loss = ax_loss.get_legend_handles_labels()
+        lines_weight, labels_weight = ax_weight.get_legend_handles_labels()
+        ax_loss.legend(lines_loss + lines_weight, labels_loss + labels_weight, loc="best")
+
+        ax_loss.set_title("MT-OBVAE Training Progress")
+        ax_loss.grid(True, linestyle="--", alpha=0.5)
+        fig.tight_layout()
 
         fig_path = os.path.join(self.output_dir, "training_curves.png")
         plt.savefig(fig_path, dpi=300)
-        plt.close()
+        plt.close(fig)
 
     def export(self) -> None:
         self.save_logs()

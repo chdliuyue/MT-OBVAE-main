@@ -55,7 +55,9 @@ def summarize_uncertainty(prob_samples: Dict[str, np.ndarray]) -> Dict[str, Dict
     return summaries
 
 
-def plot_probability_distributions(prob_samples: Dict[str, np.ndarray], output_dir: str, prefix: str = "sample") -> None:
+def plot_probability_distributions(
+    prob_samples: Dict[str, np.ndarray], output_dir: str, prefix: str = "3_sample"
+) -> None:
     os.makedirs(output_dir, exist_ok=True)
     for task, samples in prob_samples.items():
         plt.figure(figsize=(7, 4))
@@ -98,7 +100,7 @@ def visualize_uncertainty_cases(
         summaries = summarize_uncertainty(prob_samples)
         results.append({"sample_index": idx, "aleatoric_index": aleatoric_index, "summaries": summaries})
 
-        prefix = f"sample_{idx}"
+        prefix = f"3_sample_{idx}"
         plot_probability_distributions(prob_samples, output_dir, prefix=prefix)
 
         json_path = os.path.join(output_dir, f"{prefix}_uncertainty.json")
