@@ -1,5 +1,6 @@
+import json
 import os
-from typing import Dict
+from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -73,13 +74,29 @@ def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4), prefix:
         ax.set_xlabel("Latent dim")
         ax.set_ylabel("Normalized |beta|")
         ax.grid(True, linestyle="--", alpha=0.5)
+        for patch in ax.patches:
+            ax.text(
+                patch.get_x() + patch.get_width() / 2,
+                patch.get_height(),
+                f"{patch.get_height():.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                rotation=0,
+            )
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, f"{prefix}decoder_sensitivity_bars.png"), dpi=300)
     plt.close()
 
 
 def visualize_decoder_sensitivities(
-    npz_path: str, output_dir: str, sort_dimensions: bool = False, prefix: str = "3_"
+    npz_path: str,
+    output_dir: str,
+    sort_dimensions: bool = False,
+    prefix: str = "3_",
+    latent_df: pd.DataFrame | None = None,
+    feature_limit: int = 12,
+    top_k: int = 3,
 ) -> pd.DataFrame:
     os.makedirs(output_dir, exist_ok=True)
     sensitivities = load_sensitivities(npz_path)
@@ -89,4 +106,70 @@ def visualize_decoder_sensitivities(
 
     plot_heatmap(table, output_dir, prefix=prefix)
     plot_task_bars(table, output_dir, prefix=prefix)
+
+    if latent_df is not None:
+        influence_json = os.path.join(output_dir, f"{prefix}latent_feature_influence.json")
+        summary = summarize_feature_latent_links(
+            latent_df, table, output_path=influence_json, feature_limit=feature_limit, top_k=top_k
+        )
+        print(f"特征-隐空间影响关系已保存至 {influence_json}:")
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
     return table
+
+
+def _select_observable_features(df: pd.DataFrame, limit: int = 12) -> List[str]:
+    excluded_prefixes = ("mu_z_", "log_var_z_", "y_", "tsne_", "umap_", "risk_", "sample_id")
+    candidates = [
+        col for col in df.columns if not any(col.startswith(prefix) for prefix in excluded_prefixes)
+    ]
+    return candidates[:limit]
+
+
+def summarize_feature_latent_links(
+    latent_df: pd.DataFrame,
+    sensitivity_table: pd.DataFrame,
+    output_path: str,
+    feature_limit: int = 12,
+    top_k: int = 3,
+) -> dict:
+    feature_cols = _select_observable_features(latent_df, limit=feature_limit)
+    mu_cols = [col for col in latent_df.columns if col.startswith("mu_z_")]
+
+    correlation_rows = []
+    for dim_idx, mu_col in enumerate(mu_cols):
+        for feature in feature_cols:
+            corr = np.corrcoef(latent_df[feature], latent_df[mu_col])[0, 1]
+            if np.isnan(corr):
+                corr = 0.0
+            correlation_rows.append(
+                {"latent_dim": dim_idx, "feature": feature, "corr": float(corr), "abs_corr": float(abs(corr))}
+            )
+
+    corr_df = pd.DataFrame(correlation_rows)
+    corr_df.to_csv(output_path.replace(".json", "_matrix.csv"), index=False)
+
+    latent_top_features = {}
+    for dim_idx in range(len(mu_cols)):
+        top_features = (
+            corr_df[corr_df["latent_dim"] == dim_idx]
+            .sort_values("abs_corr", ascending=False)
+            .head(top_k)
+        )
+        latent_top_features[f"z{dim_idx}"] = top_features[["feature", "corr", "abs_corr"]].to_dict(orient="records")
+
+    task_top_dims = {}
+    for task, values in sensitivity_table.items():
+        sorted_dims = values.sort_values(ascending=False).head(top_k)
+        task_top_dims[task] = [
+            {"latent_dim": dim, "normalized_weight": float(weight)} for dim, weight in sorted_dims.items()
+        ]
+
+    summary = {
+        "task_top_latent_dims": task_top_dims,
+        "latent_dim_top_features": latent_top_features,
+    }
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+
+    return summary

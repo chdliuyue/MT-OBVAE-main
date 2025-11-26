@@ -1,9 +1,10 @@
 import json
 import os
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 
@@ -22,7 +23,9 @@ def _get_device(model: torch.nn.Module) -> torch.device:
     return next(model.parameters()).device
 
 
-def mc_sample_probabilities(model: torch.nn.Module, x_batch: torch.Tensor, num_mc_samples: int = 100) -> Dict[str, np.ndarray]:
+def mc_sample_probabilities(
+    model: torch.nn.Module, x_batch: torch.Tensor, num_mc_samples: int = 100
+) -> Dict[str, np.ndarray]:
     device = _get_device(model)
     task_names = ["ttc", "drac", "psd"]
     x_batch = x_batch.to(device)
@@ -42,25 +45,25 @@ def mc_sample_probabilities(model: torch.nn.Module, x_batch: torch.Tensor, num_m
                 probs = cdf_vals[:, 1:] - cdf_vals[:, :-1]
                 all_prob_preds[task].append(probs.cpu().numpy())
 
-    return {task: np.concatenate(samples, axis=0) for task, samples in all_prob_preds.items()}
+    return {task: np.stack(samples, axis=0) for task, samples in all_prob_preds.items()}
 
 
-def summarize_uncertainty(prob_samples: Dict[str, np.ndarray]) -> Dict[str, Dict[str, float]]:
-    summaries: Dict[str, Dict[str, float]] = {}
+def summarize_uncertainty(prob_samples: Dict[str, np.ndarray]) -> Dict[str, Dict[str, np.ndarray]]:
+    summaries: Dict[str, Dict[str, np.ndarray]] = {}
     for task, samples in prob_samples.items():
-        mean_prob = samples.mean(axis=0)
-        epistemic_var = samples.var(axis=0).sum()
+        # samples: [num_mc, batch, classes]
+        mean_prob = samples.mean(axis=0)  # [batch, classes]
+        epistemic_var = samples.var(axis=0).sum(axis=1)  # [batch]
 
-        # Mutual information approximation: H(mean) - mean(H(p_i))
-        mean_entropy = -np.sum(mean_prob * np.log(mean_prob + 1e-9))
-        entropies = -np.sum(samples * np.log(samples + 1e-9), axis=1)
-        expected_entropy = entropies.mean()
+        mean_entropy = -np.sum(mean_prob * np.log(mean_prob + 1e-9), axis=1)
+        entropies = -np.sum(samples * np.log(samples + 1e-9), axis=2)
+        expected_entropy = entropies.mean(axis=0)
         mutual_information = mean_entropy - expected_entropy
 
         summaries[task] = {
-            "predictive_mean": mean_prob.tolist(),
-            "epistemic_variance": float(epistemic_var),
-            "mutual_information": float(mutual_information),
+            "predictive_mean": mean_prob,
+            "epistemic_variance": epistemic_var,
+            "mutual_information": mutual_information,
         }
     return summaries
 
@@ -70,9 +73,10 @@ def plot_probability_distributions(
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
     for task, samples in prob_samples.items():
+        flattened = samples.reshape(-1, samples.shape[-1])
         plt.figure(figsize=(7, 4))
         plt.boxplot(
-            samples,
+            flattened,
             labels=["class0", "class1", "class2", "class3"],
             patch_artist=True,
             boxprops=dict(facecolor=NATURE_PALETTE[1], color=NATURE_PALETTE[3]),
@@ -86,12 +90,16 @@ def plot_probability_distributions(
         plt.close()
 
         plt.figure(figsize=(7, 4))
-        plt.hist(samples.flatten(), bins=30, alpha=0.75, color=NATURE_PALETTE[0], edgecolor=NATURE_PALETTE[3])
+        density_counts, bin_edges = np.histogram(flattened.ravel(), bins=30, range=(0, 1), density=True)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        plt.plot(bin_centers, density_counts, color=NATURE_PALETTE[0], linewidth=2)
+        plt.fill_between(bin_centers, density_counts, color=NATURE_PALETTE[0], alpha=0.25)
         plt.xlabel("Predicted probability")
-        plt.ylabel("Frequency")
-        plt.title(f"Probability histogram - {task}")
+        plt.ylabel("Density")
+        plt.title(f"Probability density (all classes) - {task}")
+        plt.xlim(0, 1)
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f"{prefix}_{task}_prob_hist.png"), dpi=300)
+        plt.savefig(os.path.join(output_dir, f"{prefix}_{task}_prob_density.png"), dpi=300)
         plt.close()
 
 
@@ -107,20 +115,65 @@ def visualize_uncertainty_cases(
     device = _get_device(model)
 
     for idx in sample_indices:
-        x_tensor = torch.tensor(X_data[idx: idx + 1]).to(device)
+        x_tensor = torch.tensor(X_data[idx: idx + 1], dtype=torch.float32).to(device)
         with torch.no_grad():
             _, log_var_z = model.encoder(x_tensor)
             aleatoric_index = float(torch.sum(torch.exp(log_var_z)).item())
 
         prob_samples = mc_sample_probabilities(model, x_tensor, num_mc_samples=num_mc_samples)
         summaries = summarize_uncertainty(prob_samples)
-        results.append({"sample_index": idx, "aleatoric_index": aleatoric_index, "summaries": summaries})
+        json_summaries = {}
+        for task, stats in summaries.items():
+            json_summaries[task] = {
+                "predictive_mean": stats["predictive_mean"][0].tolist(),
+                "epistemic_variance": float(stats["epistemic_variance"][0]),
+                "mutual_information": float(stats["mutual_information"][0]),
+            }
+        results.append({"sample_index": idx, "aleatoric_index": aleatoric_index, "summaries": json_summaries})
 
         prefix = f"4_sample_{idx}"
         plot_probability_distributions(prob_samples, output_dir, prefix=prefix)
 
         json_path = os.path.join(output_dir, f"{prefix}_uncertainty.json")
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump({"sample_index": idx, "aleatoric_index": aleatoric_index, "summaries": summaries}, f, indent=2, ensure_ascii=False)
+            json.dump({"sample_index": idx, "aleatoric_index": aleatoric_index, "summaries": json_summaries}, f, indent=2, ensure_ascii=False)
 
     return results
+
+
+def rank_uncertainty_extremes(
+    model: torch.nn.Module,
+    X_data: np.ndarray,
+    num_mc_samples: int = 100,
+    top_k: int = 5,
+    metric: str = "mutual_information",
+    batch_size: int = 128,
+    output_dir: str | None = None,
+) -> Tuple[List[int], List[int], pd.DataFrame]:
+    device = _get_device(model)
+    tensor_data = torch.tensor(X_data, dtype=torch.float32)
+    records = []
+
+    for start in range(0, len(tensor_data), batch_size):
+        batch = tensor_data[start : start + batch_size].to(device)
+        prob_samples = mc_sample_probabilities(model, batch, num_mc_samples=num_mc_samples)
+        summaries = summarize_uncertainty(prob_samples)
+        if metric not in {"mutual_information", "epistemic_variance"}:
+            raise ValueError("metric 必须是 'mutual_information' 或 'epistemic_variance'")
+
+        stacked_metric = np.stack([summaries[task][metric] for task in summaries], axis=1)
+        averaged_metric = stacked_metric.mean(axis=1)
+
+        for offset, score in enumerate(averaged_metric):
+            records.append({"sample_index": start + offset, metric: float(score)})
+
+    ranking_df = pd.DataFrame(records)
+    ranking_df = ranking_df.sort_values(metric, ascending=False).reset_index(drop=True)
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        ranking_df.to_csv(os.path.join(output_dir, f"4_uncertainty_{metric}_ranking.csv"), index=False)
+
+    high = ranking_df.head(top_k)["sample_index"].tolist()
+    low = ranking_df.tail(top_k)["sample_index"].tolist()
+    return high, low, ranking_df

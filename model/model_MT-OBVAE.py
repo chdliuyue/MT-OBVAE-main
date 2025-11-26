@@ -22,7 +22,7 @@ from module.metrics import evaluate_multitask_predictions, format_results_table
 from module.phase_space import generate_phase_space
 from module.sensitivity_profile import visualize_decoder_sensitivities
 from module.training_monitor import TrainingMonitor
-from module.uncertainty_viz import visualize_uncertainty_cases
+from module.uncertainty_viz import rank_uncertainty_extremes, visualize_uncertainty_cases
 
 # --- 项目路径设置 ---
 # 假设您的代码文件在 model 文件夹下，而 module 文件夹与 model 在同一级目录
@@ -430,13 +430,20 @@ def main():
         prefix="2_",
         embedding_method=args.embedding_method,
         perplexity=args.embedding_perplexity,
+        latent_prefix="1_",
     )
 
     # 接口 3: 风险敏感性剖面与触发机制解耦
     decoder_weights = extract_decoder_sensitivities(model)
     sensitivities_file = os.path.join(args.out_dir, "3_decoder_sensitivities.npz")
     np.savez(sensitivities_file, **decoder_weights)
-    visualize_decoder_sensitivities(sensitivities_file, args.out_dir, prefix="3_", sort_dimensions=False)
+    visualize_decoder_sensitivities(
+        sensitivities_file,
+        args.out_dir,
+        prefix="3_",
+        sort_dimensions=False,
+        latent_df=latent_space_df,
+    )
     print(f"\n接口3: 解码器敏感性权重已保存至 {sensitivities_file}")
     for task, weights in decoder_weights.items():
         print(f"--- 任务: {task}, 权重形状: {weights.shape} ---")
@@ -444,8 +451,17 @@ def main():
     # 接口 4: 认知不确定性与可靠性感知预警
     index_list = [int(idx.strip()) for idx in args.uncertainty_indices.split(',') if idx.strip().isdigit()]
     index_list = [idx for idx in index_list if 0 <= idx < len(X_test)]
+    uncertainty_metric = "mutual_information"
     if not index_list:
-        index_list = select_representative_high_risk_samples(y_test, top_k=args.uncertainty_top_k)
+        high_uncertainty, low_uncertainty, ranking_df = rank_uncertainty_extremes(
+            model,
+            X_test,
+            num_mc_samples=args.uncertainty_mc_samples,
+            top_k=args.uncertainty_top_k,
+            metric=uncertainty_metric,
+            output_dir=args.out_dir,
+        )
+        index_list = high_uncertainty + [idx for idx in low_uncertainty if idx not in high_uncertainty]
 
     if index_list:
         uncertainty_results = visualize_uncertainty_cases(

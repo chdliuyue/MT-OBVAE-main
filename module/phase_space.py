@@ -121,14 +121,30 @@ def _dominant_risk_label(row: pd.Series) -> str:
     if not valid_levels:
         return "Unknown"
 
+    level_order = ["TTC", "DRAC", "PSD"]
     max_val = max(valid_levels.values())
-    dominant = [k for k, v in valid_levels.items() if v == max_val]
     level_names = {0: "Low", 1: "Medium", 2: "High"}
     level_label = level_names.get(max_val, f"Level {max_val}")
 
-    if len(dominant) == 1:
-        return f"{dominant[0]}-{level_label}"
-    return f"Mixed-{level_label}"
+    for task in level_order:
+        if valid_levels.get(task, -1) == max_val:
+            return f"{task}-{level_label}"
+
+    return "Unknown"
+
+
+def _risk_palette() -> dict[str, str]:
+    return {
+        "TTC-High": "#b2182b",
+        "DRAC-High": "#d6604d",
+        "PSD-High": "#f4a582",
+        "TTC-Medium": "#2166ac",
+        "DRAC-Medium": "#4393c3",
+        "PSD-Medium": "#92c5de",
+        "TTC-Low": "#1b7837",
+        "DRAC-Low": "#5aae61",
+        "PSD-Low": "#a6dba0",
+    }
 
 
 def _get_embedding_columns(df: pd.DataFrame, method: str) -> tuple[str, str]:
@@ -214,15 +230,23 @@ def plot_dominant_risk_coloring(
     _ensure_output_dir(output_dir)
     df = df.copy()
     df["dominant_risk"] = df.apply(_dominant_risk_label, axis=1)
-    palette = _get_palette(df["dominant_risk"].nunique())
+    palette_map = _risk_palette()
 
     plt.figure(figsize=figsize)
-    for color, (risk_label, group) in zip(palette, df.groupby("dominant_risk")):
-        plt.scatter(group[coord_cols[0]], group[coord_cols[1]], label=risk_label, alpha=0.7, s=18, color=color)
+    for risk_label, group in df.groupby("dominant_risk"):
+        color = palette_map.get(risk_label, "#777777")
+        plt.scatter(
+            group[coord_cols[0]],
+            group[coord_cols[1]],
+            label=risk_label,
+            alpha=0.72,
+            s=18,
+            color=color,
+        )
 
     plt.xlabel(f"{embedding_label} 1")
     plt.ylabel(f"{embedding_label} 2")
-    plt.title(f"Conflict phase space ({embedding_label}) — dominant risk")
+    plt.title(f"Conflict phase space ({embedding_label}) — risk type (High/Medium/Low)")
     plt.legend(title="Risk type")
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
@@ -254,18 +278,19 @@ def plot_risk_ambiguity_vs_density(
     peak_y = poly(peak_x) if not np.isnan(peak_x) else float("nan")
 
     plt.figure(figsize=figsize)
-    plt.scatter(x, y, alpha=0.55, label="Samples", s=18, color=NATURE_PALETTE[0])
-    plt.plot(x_smooth, y_smooth, color=NATURE_PALETTE[3], label="Quadratic fit", linewidth=2)
+    plt.scatter(x, y, alpha=0.6, label="Samples", s=18, color="#2E8B57")
+    plt.plot(x_smooth, y_smooth, color="#1D2F6F", label="Quadratic fit (RAI(x))", linewidth=2.5)
     if not np.isnan(peak_x):
         plt.axvline(peak_x, color=NATURE_PALETTE[2], linestyle="--", alpha=0.7)
         plt.scatter([peak_x], [peak_y], color=NATURE_PALETTE[4], zorder=5)
         plt.text(peak_x, peak_y, f"Peak=({peak_x:.2f}, {peak_y:.2f})", fontsize=9)
 
-    plt.xlabel(density_feature)
-    plt.ylabel("Risk Ambiguity Index")
-    plt.title("Risk ambiguity vs traffic density")
-    plt.legend()
+    plt.xlabel(density_feature, fontsize=12)
+    plt.ylabel("Risk Ambiguity Index (RAI)", fontsize=12)
+    plt.title("Risk ambiguity vs traffic density", fontsize=13)
+    plt.legend(fontsize=11)
     plt.grid(True, linestyle="--", alpha=0.4)
+    plt.tick_params(labelsize=11)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "risk_ambiguity_density.png")), dpi=300)
     plt.close()
@@ -310,24 +335,31 @@ def plot_risk_ambiguity_feature_relationships(
         x = df[feature].values
         y = df["risk_ambiguity_index"].values
 
-        ax.scatter(x, y, alpha=0.5, color=NATURE_PALETTE[0], s=18, label="Samples")
+        ax.scatter(x, y, alpha=0.55, color="#2E8B57", s=18, label="Samples")
         try:
             coeffs = np.polyfit(x, y, deg=2)
             poly = np.poly1d(coeffs)
             x_smooth = np.linspace(x.min(), x.max(), 200)
-            ax.plot(x_smooth, poly(x_smooth), color=NATURE_PALETTE[3], linewidth=2, label="Quadratic fit")
+            ax.plot(
+                x_smooth,
+                poly(x_smooth),
+                color="#1D2F6F",
+                linewidth=2.5,
+                label="Quadratic fit (RAI(x))",
+            )
         except np.linalg.LinAlgError:
             pass
 
-        ax.set_xlabel(feature)
-        ax.set_ylabel("Risk Ambiguity")
+        ax.set_xlabel(feature, fontsize=11)
+        ax.set_ylabel("Risk Ambiguity", fontsize=11)
         ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend()
+        ax.legend(fontsize=9)
+        ax.tick_params(labelsize=10)
 
     for ax in axes.flatten()[num_features:]:
         ax.axis("off")
 
-    fig.suptitle("Risk ambiguity vs. traffic features", fontsize=14)
+    fig.suptitle("Risk ambiguity vs. traffic features", fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "risk_ambiguity_features.png")), dpi=300)
     plt.close(fig)
@@ -340,14 +372,16 @@ def generate_phase_space(
     prefix: str = "2_",
     embedding_method: str = "tsne",
     perplexity: int = 30,
+    latent_prefix: Optional[str] = None,
 ) -> pd.DataFrame:
     _ensure_output_dir(output_dir)
     latent_df = pd.read_csv(latent_csv)
     latent_df, chosen_method = compute_embeddings(latent_df, method=embedding_method, perplexity=perplexity)
     coord_cols = _get_embedding_columns(latent_df, chosen_method)
     embedding_label = chosen_method.upper()
+    latent_prefix = latent_prefix if latent_prefix is not None else prefix
     enriched_path = os.path.join(
-        output_dir, _prefixed_name(prefix, f"latent_space_with_{embedding_label.lower()}.csv")
+        output_dir, _prefixed_name(latent_prefix, f"latent_space_with_{embedding_label.lower()}.csv")
     )
     latent_df.to_csv(enriched_path, index=False)
 
