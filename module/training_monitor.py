@@ -40,7 +40,7 @@ class TrainingMonitor:
             return
 
         df = self._to_dataframe()
-        nature_palette = ["#E64B35", "#4DBBD5", "#00A087"]
+        nature_palette = ["#D81B60", "#1E88E5", "#43A047"]
         fig, ax_loss = plt.subplots(figsize=figsize)
 
         ax_loss.plot(
@@ -48,6 +48,7 @@ class TrainingMonitor:
             df["recon_loss"],
             label="Reconstruction Loss",
             marker="o",
+            markersize=4,
             color=nature_palette[0],
         )
         ax_loss.plot(
@@ -55,10 +56,12 @@ class TrainingMonitor:
             df["kl_loss"],
             label="KL Loss",
             marker="o",
+            markersize=4,
             color=nature_palette[1],
         )
         ax_loss.set_xlabel("Epoch")
         ax_loss.set_ylabel("Loss")
+        ax_loss.set_xlim(0, 200)
 
         ax_weight = ax_loss.twinx()
         ax_weight.plot(
@@ -70,6 +73,7 @@ class TrainingMonitor:
         )
         ax_weight.set_ylabel(r"$\lambda_{t}$")
         ax_weight.set_ylim(0, 0.02)
+        ax_weight.set_yticks(ax_loss.get_yticks())
 
         lines_loss, labels_loss = ax_loss.get_legend_handles_labels()
         lines_weight, labels_weight = ax_weight.get_legend_handles_labels()
