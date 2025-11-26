@@ -13,6 +13,11 @@ import json
 from blitz.modules import BayesianLinear
 from blitz.utils import variational_estimator
 
+from module.interfaces import (
+    extract_decoder_sensitivities,
+    extract_latent_space,
+    predict_with_uncertainty,
+)
 from module.metrics import evaluate_multitask_predictions, format_results_table
 from module.phase_space import generate_phase_space
 from module.sensitivity_profile import visualize_decoder_sensitivities
@@ -294,98 +299,6 @@ def evaluate_model_mt_obvae(model, X_test, y_test, num_samples=100):
     return metrics
 
 
-def extract_latent_space(model, X_data, y_data, feature_names, batch_size=256):
-    """接口 1 & 2: 提取隐空间表示 (用于冲突相空间) 和 风险模糊度 (偶然不确定性)"""
-    print("接口 1 & 2: 正在提取隐空间数据...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.eval()
-    results = []
-
-    dataset = torch.utils.data.TensorDataset(torch.tensor(X_data), torch.tensor(y_data))
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size)
-
-    with torch.no_grad():
-        for i, (Xb, yb) in enumerate(tqdm(dataloader, desc="提取隐空间")):
-            Xb = Xb.to(device)
-            mu_z, log_var_z = model.encoder(Xb)
-
-            mu_z_cpu, log_var_z_cpu = mu_z.cpu().numpy(), log_var_z.cpu().numpy()
-
-            for j in range(len(Xb)):
-                sample_data = {"sample_id": i * batch_size + j}
-                sample_data.update({f"mu_z_{k}": mu_z_cpu[j, k] for k in range(model.latent_dim)})
-                sample_data.update({f"log_var_z_{k}": log_var_z_cpu[j, k] for k in range(model.latent_dim)})
-                sample_data.update({f"{name}": Xb[j, k].cpu().item() for k, name in enumerate(feature_names)})
-                sample_data.update({"y_ttc": yb[j, 0].item(), "y_drac": yb[j, 1].item(), "y_psd": yb[j, 2].item()})
-                results.append(sample_data)
-
-    df = pd.DataFrame(results)
-    # 计算风险模糊度指数 (偶然不确定性的量化)
-    var_cols = [f'log_var_z_{k}' for k in range(model.latent_dim)]
-    df['risk_ambiguity_index'] = np.sum(np.exp(df[var_cols].values), axis=1)
-
-    return df
-
-
-def predict_with_uncertainty(model, x_sample, num_mc_samples=100):
-    """接口 3: 对单个样本进行预测，并分解不确定性"""
-    print("接口 3: 正在对单个样本进行不确定性分解...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.eval()
-    task_names = ['ttc', 'drac', 'psd']
-    x_tensor = torch.tensor(x_sample).unsqueeze(0).to(device)
-
-    # 1. 获取偶然不确定性指标 (风险模糊度)
-    with torch.no_grad():
-        mu_z, log_var_z = model.encoder(x_tensor)
-        aleatoric_index = torch.sum(torch.exp(log_var_z)).item()
-
-    # 2. 通过蒙特卡洛采样获取认知不确定性
-    all_prob_preds = {task: [] for task in task_names}
-    with torch.no_grad():
-        for _ in range(num_mc_samples):
-            outputs = model(x_tensor)
-            z_sample = outputs['z_sample']
-            for task in task_names:
-                beta, thresholds = outputs[f'params_{task}']
-                latent_pred = torch.bmm(z_sample.unsqueeze(1), beta).squeeze(-1).squeeze(-1)
-                padded_thresholds = F.pad(thresholds, (1, 1), 'constant', torch.inf)
-                padded_thresholds[:, 0] = -torch.inf
-                cdf_vals = torch.distributions.Normal(0, 1).cdf(padded_thresholds - latent_pred.unsqueeze(1))
-                probs = cdf_vals[:, 1:] - cdf_vals[:, :-1]
-                all_prob_preds[task].append(probs.cpu().numpy())
-
-    # 3. 汇总结果
-    predictive_mean = {}
-    epistemic_uncertainty = {}
-    for task in task_names:
-        preds_array = np.concatenate(all_prob_preds[task], axis=0)
-        predictive_mean[task] = preds_array.mean(axis=0)
-
-        # 认知不确定性可以用多种方式量化, 这里用预测概率向量的方差之和作为示例
-        epistemic_uncertainty[task] = np.var(preds_array, axis=0).sum()
-
-    return {
-        "平均预测概率": predictive_mean,
-        "认知不确定性(方差和)": epistemic_uncertainty,
-        "偶然不确定性指数(风险模糊度)": aleatoric_index
-    }
-
-
-def extract_decoder_sensitivities(model):
-    """接口 4: 提取解码器敏感性（beta系数网络的权重均值）"""
-    print("接口 4: 正在提取解码器敏感性剖面...")
-    sensitivities = {}
-    task_names = ['ttc', 'drac', 'psd']
-
-    for task in task_names:
-        decoder = getattr(model, f"decoder_{task}")
-        # 提取beta_layer层的权重均值
-        beta_mean_weights = decoder.beta.data.detach().cpu().numpy()
-        sensitivities[task] = beta_mean_weights
-
-    return sensitivities
-
 
 # 5. 主函数
 def main():
@@ -445,7 +358,7 @@ def main():
 
     # 接口 1 & 2: 提取隐空间数据和风险模糊度
     latent_space_df = extract_latent_space(model, X_test, y_test, feature_names)
-    latent_space_df_path = os.path.join(args.out_dir, "latent_space_data.csv")
+    latent_space_df_path = os.path.join(args.out_dir, "1_latent_space_data.csv")
     latent_space_df.to_csv(latent_space_df_path, index=False)
     print(f"\n接口1&2: 隐空间数据已保存至 {latent_space_df_path}")
     print("隐空间数据预览:")
@@ -462,7 +375,7 @@ def main():
             args.out_dir,
             num_mc_samples=args.uncertainty_mc_samples,
         )
-        uncertainty_json = os.path.join(args.out_dir, "uncertainty_cases.json")
+        uncertainty_json = os.path.join(args.out_dir, "3_uncertainty_cases.json")
         with open(uncertainty_json, "w", encoding="utf-8") as f:
             json.dump(uncertainty_results, f, indent=2, ensure_ascii=False)
 
@@ -480,23 +393,23 @@ def main():
                     row[f"predictive_mean_class{i}"] = prob
                 flattened_rows.append(row)
 
-        pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "uncertainty_cases.csv"), index=False)
+        pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "3_uncertainty_cases.csv"), index=False)
         print(f"\n接口3: 不确定性案例分析结果已保存至 {uncertainty_json}")
     else:
         print("未提供有效的样本索引，跳过不确定性可视化。")
 
     # 接口 4: 提取解码器敏感性
     decoder_weights = extract_decoder_sensitivities(model)
-    sensitivities_file = os.path.join(args.out_dir, "decoder_sensitivities.npz")
+    sensitivities_file = os.path.join(args.out_dir, "4_decoder_sensitivities.npz")
     # 使用np.savez保存多个数组到一个文件
     np.savez(sensitivities_file, **decoder_weights)
-    visualize_decoder_sensitivities(sensitivities_file, args.out_dir)
+    visualize_decoder_sensitivities(sensitivities_file, args.out_dir, prefix="4_")
     print(f"\n接口4: 解码器敏感性权重已保存至 {sensitivities_file}")
     for task, weights in decoder_weights.items():
         print(f"--- 任务: {task}, 权重形状: {weights.shape} ---")
 
     # 生成冲突相空间可视化与风险模糊度分析
-    generate_phase_space(latent_space_df_path, args.out_dir, density_feature=args.density_feature)
+    generate_phase_space(latent_space_df_path, args.out_dir, density_feature=args.density_feature, prefix="2_")
 
 
 if __name__ == "__main__":

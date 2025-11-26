@@ -18,6 +18,10 @@ def _ensure_output_dir(output_dir: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
 
 
+def _prefixed_name(prefix: str, filename: str) -> str:
+    return f"{prefix}{filename}" if prefix else filename
+
+
 def compute_embeddings(latent_df: pd.DataFrame, random_state: int = 42, perplexity: int = 30) -> pd.DataFrame:
     mu_cols = [col for col in latent_df.columns if col.startswith("mu_z_")]
     tsne_coords = TSNE(n_components=2, perplexity=perplexity, random_state=random_state, init="random").fit_transform(
@@ -48,7 +52,9 @@ def _assign_risk_label(row: pd.Series) -> str:
     return "Low risk"
 
 
-def plot_density_coloring(df: pd.DataFrame, output_dir: str, density_feature: Optional[str] = None, figsize=(7, 6)) -> None:
+def plot_density_coloring(
+    df: pd.DataFrame, output_dir: str, density_feature: Optional[str] = None, figsize=(7, 6), prefix: str = "2_"
+) -> None:
     _ensure_output_dir(output_dir)
     density_feature = density_feature or _infer_density_feature(df)
     if density_feature is None:
@@ -62,11 +68,11 @@ def plot_density_coloring(df: pd.DataFrame, output_dir: str, density_feature: Op
     plt.title("Latent Space colored by traffic density")
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "phase_space_density.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "phase_space_density.png")), dpi=300)
     plt.close()
 
 
-def plot_risk_coloring(df: pd.DataFrame, output_dir: str, figsize=(7, 6)) -> None:
+def plot_risk_coloring(df: pd.DataFrame, output_dir: str, figsize=(7, 6), prefix: str = "2_") -> None:
     _ensure_output_dir(output_dir)
     df = df.copy()
     df["risk_type"] = df.apply(_assign_risk_label, axis=1)
@@ -86,14 +92,16 @@ def plot_risk_coloring(df: pd.DataFrame, output_dir: str, figsize=(7, 6)) -> Non
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "phase_space_risk.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "phase_space_risk.png")), dpi=300)
     plt.close()
 
-    centroids_path = os.path.join(output_dir, "risk_centroids.json")
+    centroids_path = os.path.join(output_dir, _prefixed_name(prefix, "risk_centroids.json"))
     centroids.to_json(centroids_path, orient="records", indent=2)
 
 
-def plot_risk_ambiguity_vs_density(latent_csv: str, output_dir: str, density_feature: Optional[str] = None, figsize=(7, 5)) -> None:
+def plot_risk_ambiguity_vs_density(
+    latent_csv: str, output_dir: str, density_feature: Optional[str] = None, figsize=(7, 5), prefix: str = "2_"
+) -> None:
     _ensure_output_dir(output_dir)
     df = pd.read_csv(latent_csv)
     density_feature = density_feature or _infer_density_feature(df)
@@ -125,7 +133,7 @@ def plot_risk_ambiguity_vs_density(latent_csv: str, output_dir: str, density_fea
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "risk_ambiguity_density.png"), dpi=300)
+    plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "risk_ambiguity_density.png")), dpi=300)
     plt.close()
 
     summary = {
@@ -134,19 +142,19 @@ def plot_risk_ambiguity_vs_density(latent_csv: str, output_dir: str, density_fea
         "peak_density": peak_x,
         "peak_risk_ambiguity": float(peak_y),
     }
-    json_path = os.path.join(output_dir, "risk_ambiguity_fit.json")
+    json_path = os.path.join(output_dir, _prefixed_name(prefix, "risk_ambiguity_fit.json"))
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
 
 
-def generate_phase_space(latent_csv: str, output_dir: str, density_feature: Optional[str] = None) -> pd.DataFrame:
+def generate_phase_space(latent_csv: str, output_dir: str, density_feature: Optional[str] = None, prefix: str = "2_") -> pd.DataFrame:
     _ensure_output_dir(output_dir)
     latent_df = pd.read_csv(latent_csv)
     latent_df = compute_embeddings(latent_df)
-    enriched_path = os.path.join(output_dir, "latent_space_with_tsne.csv")
+    enriched_path = os.path.join(output_dir, _prefixed_name(prefix, "latent_space_with_tsne.csv"))
     latent_df.to_csv(enriched_path, index=False)
 
-    plot_density_coloring(latent_df, output_dir, density_feature=density_feature)
-    plot_risk_coloring(latent_df, output_dir)
-    plot_risk_ambiguity_vs_density(latent_csv, output_dir, density_feature=density_feature)
+    plot_density_coloring(latent_df, output_dir, density_feature=density_feature, prefix=prefix)
+    plot_risk_coloring(latent_df, output_dir, prefix=prefix)
+    plot_risk_ambiguity_vs_density(latent_csv, output_dir, density_feature=density_feature, prefix=prefix)
     return latent_df
