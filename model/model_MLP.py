@@ -12,7 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from module.metrics import evaluate_multitask_predictions, format_results_table
+from module.metrics import (
+    evaluate_multitask_predictions,
+    format_results_table,
+    format_summary_table,
+    summarise_metric_runs,
+)
+from module.utils import set_global_seed
 
 
 # 1. 数据加载
@@ -121,27 +127,47 @@ def main():
     ap.add_argument("--train", default="../data/" + ratio_name + "/train_old.csv")
     ap.add_argument("--test", default="../data/" + ratio_name + "/test_old.csv")
     ap.add_argument("--out_dir", default="../output/" + ratio_name + "/results_mlp")
+    ap.add_argument("--runs", type=int, default=5, help="重复实验次数")
+    ap.add_argument(
+        "--base_seed", type=int, default=42, help="随机种子（每次运行递增）"
+    )
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     X_train, y_train, X_test, y_test = load_data(args.train, args.test)
 
-    models = train_mlp_model(X_train, y_train, args.out_dir)
+    all_runs = []
+    for run_idx in range(args.runs):
+        run_dir = os.path.join(args.out_dir, f"run_{run_idx}")
+        os.makedirs(run_dir, exist_ok=True)
 
-    metrics = evaluate_model(models, X_test, y_test)
+        current_seed = args.base_seed + run_idx
+        set_global_seed(current_seed)
 
-    results_file = os.path.join(args.out_dir, "evaluation_results.txt")
-    with open(results_file, 'w') as f:
-        f.write("Task | Accuracy | F1 | QWK | OrdMAE | NLL | Brier | AUROC | BrdECE\n")
-        for metric in metrics:
-            f.write(
-                f"{metric.task} | {metric.accuracy:.4f} | {metric.f1_score:.4f} | "
-                f"{metric.qwk:.4f} | {metric.ordmae:.4f} | {metric.nll:.4f} | "
-                f"{metric.brier:.4f} | {metric.auroc:.4f} | {metric.brdece:.4f}\n"
-            )
+        models = train_mlp_model(X_train, y_train, run_dir)
+        metrics = evaluate_model(models, X_test, y_test)
+        all_runs.append(metrics)
 
-    print(f"Evaluation results saved to {results_file}")
+        results_file = os.path.join(run_dir, "evaluation_results.txt")
+        with open(results_file, 'w') as f:
+            f.write("Task | Accuracy | F1 | QWK | OrdMAE | NLL | Brier | AUROC | BrdECE\n")
+            for metric in metrics:
+                f.write(
+                    f"{metric.task} | {metric.accuracy:.4f} | {metric.f1_score:.4f} | "
+                    f"{metric.qwk:.4f} | {metric.ordmae:.4f} | {metric.nll:.4f} | "
+                    f"{metric.brier:.4f} | {metric.auroc:.4f} | {metric.brdece:.4f}\n"
+                )
+
+        print(f"Run {run_idx} results saved to {results_file}")
+
+    _, mean_df, std_df = summarise_metric_runs(all_runs)
+    summary_file = os.path.join(args.out_dir, "evaluation_summary.csv")
+    mean_df.join(std_df, lsuffix="_mean", rsuffix="_std").to_csv(summary_file)
+
+    print("\nAggregated metrics (mean ± std):")
+    print(format_summary_table(mean_df, std_df))
+    print(f"Summary saved to {summary_file}")
 
 
 if __name__ == "__main__":

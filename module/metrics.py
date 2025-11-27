@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Iterable, List
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
     cohen_kappa_score,
@@ -204,5 +205,92 @@ def format_results_table(results: Iterable[TaskMetrics]) -> str:
     for r in results:
         row = f"{r.task:<8} | " + " | ".join(r.as_row())
         rows.append(row)
+    return "\n".join(rows)
+
+
+def task_metrics_to_frame(results: Iterable[TaskMetrics]) -> pd.DataFrame:
+    """Convert a sequence of ``TaskMetrics`` into a Pandas ``DataFrame``."""
+
+    rows = []
+    for r in results:
+        rows.append(
+            {
+                "task": r.task,
+                "accuracy": r.accuracy,
+                "f1": r.f1_score,
+                "qwk": r.qwk,
+                "ordmae": r.ordmae,
+                "nll": r.nll,
+                "brier": r.brier,
+                "auroc": r.auroc,
+                "brdece": r.brdece,
+            }
+        )
+
+    return pd.DataFrame(rows).set_index("task")
+
+
+def summarise_metric_runs(runs: Iterable[Iterable[TaskMetrics]]):
+    """Aggregate multiple runs of task metrics.
+
+    Parameters
+    ----------
+    runs:
+        An iterable of runs. Each run is an iterable of ``TaskMetrics`` objects
+        ordered consistently across runs.
+
+    Returns
+    -------
+    tuple
+        ``(stacked, mean, std)`` where ``stacked`` is a ``DataFrame`` with a
+        multi-index (run, task) containing all collected metrics, ``mean`` is a
+        per-task ``DataFrame`` of averages and ``std`` is the corresponding
+        standard deviation.
+    """
+
+    frames = []
+    for idx, run in enumerate(runs):
+        frame = task_metrics_to_frame(run)
+        frame["run"] = idx
+        frames.append(frame.reset_index())
+
+    if not frames:
+        raise ValueError("No metric runs provided for aggregation.")
+
+    stacked = pd.concat(frames).set_index(["run", "task"]).sort_index()
+    mean = stacked.groupby("task").mean(numeric_only=True)
+    std = stacked.groupby("task").std(numeric_only=True, ddof=0)
+
+    return stacked, mean, std
+
+
+def format_summary_table(mean: pd.DataFrame, std: pd.DataFrame) -> str:
+    """Pretty-print aggregated metrics with mean and standard deviation."""
+
+    header = (
+        f"{'Task':<8} | {'Accuracy':>10} | {'F1':>10} | {'QWK':>10} | "
+        f"{'OrdMAE':>10} | {'NLL':>10} | {'Brier':>10} | {'AUROC':>10} | {'BrdECE':>10}"
+    )
+    rows = [header]
+    for task in mean.index:
+        def _fmt(metric: str) -> str:
+            return f"{mean.loc[task, metric]:.4f}±{std.loc[task, metric]:.4f}"
+
+        rows.append(
+            f"{task:<8} | "
+            + " | ".join(
+                _fmt(col)
+                for col in [
+                    "accuracy",
+                    "f1",
+                    "qwk",
+                    "ordmae",
+                    "nll",
+                    "brier",
+                    "auroc",
+                    "brdece",
+                ]
+            )
+        )
     return "\n".join(rows)
 
