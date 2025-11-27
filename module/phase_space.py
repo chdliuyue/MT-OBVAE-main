@@ -10,6 +10,8 @@ from matplotlib.colors import LinearSegmentedColormap
 from sklearn.manifold import TSNE
 
 
+plt.rcParams.update({"font.family": "Times New Roman"})
+
 NATURE_PALETTE = [
     "#E64B35",
     "#4DBBD5",
@@ -123,7 +125,7 @@ def _dominant_risk_label(row: pd.Series) -> str:
 
     level_order = ["TTC", "DRAC", "PSD"]
     max_val = max(valid_levels.values())
-    level_names = {0: "Low", 1: "Medium", 2: "High"}
+    level_names = {0: "Low", 1: "Medium", 2: "High", 3: "Level 3"}
     level_label = level_names.get(max_val, f"Level {max_val}")
 
     for task in level_order:
@@ -135,6 +137,9 @@ def _dominant_risk_label(row: pd.Series) -> str:
 
 def _risk_palette() -> dict[str, str]:
     return {
+        "TTC-Level 3": "#67000d",
+        "DRAC-Level 3": "#a50f15",
+        "PSD-Level 3": "#ca0020",
         "TTC-High": "#b2182b",
         "DRAC-High": "#d6604d",
         "PSD-High": "#f4a582",
@@ -231,9 +236,14 @@ def plot_dominant_risk_coloring(
     df = df.copy()
     df["dominant_risk"] = df.apply(_dominant_risk_label, axis=1)
     palette_map = _risk_palette()
+    severity_rank = {"Level 3": 3, "High": 2, "Medium": 1, "Low": 0}
 
     plt.figure(figsize=figsize)
-    for risk_label, group in df.groupby("dominant_risk"):
+    for risk_label, group in sorted(
+        df.groupby("dominant_risk"),
+        key=lambda item: severity_rank.get(item[0].split("-")[-1], -1),
+        reverse=True,
+    ):
         color = palette_map.get(risk_label, "#777777")
         plt.scatter(
             group[coord_cols[0]],
