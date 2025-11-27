@@ -12,7 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from module.metrics import evaluate_multitask_predictions, format_results_table
+from module.metrics import (
+    evaluate_multitask_predictions,
+    format_results_table,
+    format_summary_table,
+    summarise_metric_runs,
+)
+from module.utils import set_global_seed
 
 
 # 读取和准备数据
@@ -41,7 +47,7 @@ def load_data(train_path, test_path):
 
 
 # 构建并训练XGBoost模型
-def train_xgboost_model(X, y, output_dir, feature_names):
+def train_xgboost_model(X, y, output_dir, feature_names, random_state: int = 42):
     """
     为每个任务使用网格搜索训练一个XGBoost分类器，并保存特征重要性表。
     """
@@ -68,7 +74,7 @@ def train_xgboost_model(X, y, output_dir, feature_names):
         model = xgb.XGBClassifier(
             objective='multi:softprob',
             eval_metric='mlogloss',
-            random_state=42
+            random_state=random_state
         )
 
         # 设置GridSearchCV
@@ -151,6 +157,10 @@ def main():
     ap.add_argument("--train", default=f"../data/{ratio_name}/train_old.csv")
     ap.add_argument("--test", default=f"../data/{ratio_name}/test_old.csv")
     ap.add_argument("--out_dir", default=f"../output/{ratio_name}/results_xgb_gs")
+    ap.add_argument("--runs", type=int, default=5, help="重复实验次数")
+    ap.add_argument(
+        "--base_seed", type=int, default=42, help="随机种子（每次运行递增）"
+    )
     args = ap.parse_args()
 
     # 确保输出目录存在
@@ -159,26 +169,43 @@ def main():
     # 载入数据，并获取特征名称
     X_train, y_train, X_test, y_test, feature_names = load_data(args.train, args.test)
 
-    # 训练XGBoost模型，并保存特征重要性
-    models = train_xgboost_model(X_train, y_train, args.out_dir, feature_names)
+    all_runs = []
+    for run_idx in range(args.runs):
+        run_dir = os.path.join(args.out_dir, f"run_{run_idx}")
+        os.makedirs(run_dir, exist_ok=True)
 
-    # 评估模型性能
-    metrics = evaluate_model(models, X_test, y_test)
+        current_seed = args.base_seed + run_idx
+        set_global_seed(current_seed)
 
-    # 保存评估结果
-    results_file = os.path.join(args.out_dir, "evaluation_results.txt")
-    with open(results_file, 'w') as f:
-        # 输出表头
-        f.write("Task | Accuracy | F1 | QWK | OrdMAE | NLL | Brier | AUROC | BrdECE\n")
-        # 输出每个任务的评价指标
-        for metric in metrics:
-            f.write(
-                f"{metric.task} | {metric.accuracy:.4f} | {metric.f1_score:.4f} | "
-                f"{metric.qwk:.4f} | {metric.ordmae:.4f} | {metric.nll:.4f} | "
-                f"{metric.brier:.4f} | {metric.auroc:.4f} | {metric.brdece:.4f}\n"
-            )
+        # 训练XGBoost模型，并保存特征重要性
+        models = train_xgboost_model(
+            X_train, y_train, run_dir, feature_names, random_state=current_seed
+        )
 
-    print(f"Evaluation results saved to {results_file}")
+        # 评估模型性能
+        metrics = evaluate_model(models, X_test, y_test)
+        all_runs.append(metrics)
+
+        # 保存评估结果
+        results_file = os.path.join(run_dir, "evaluation_results.txt")
+        with open(results_file, 'w') as f:
+            f.write("Task | Accuracy | F1 | QWK | OrdMAE | NLL | Brier | AUROC | BrdECE\n")
+            for metric in metrics:
+                f.write(
+                    f"{metric.task} | {metric.accuracy:.4f} | {metric.f1_score:.4f} | "
+                    f"{metric.qwk:.4f} | {metric.ordmae:.4f} | {metric.nll:.4f} | "
+                    f"{metric.brier:.4f} | {metric.auroc:.4f} | {metric.brdece:.4f}\n"
+                )
+
+        print(f"Run {run_idx} results saved to {results_file}")
+
+    _, mean_df, std_df = summarise_metric_runs(all_runs)
+    summary_file = os.path.join(args.out_dir, "evaluation_summary.csv")
+    mean_df.join(std_df, lsuffix="_mean", rsuffix="_std").to_csv(summary_file)
+
+    print("\nAggregated metrics (mean ± std):")
+    print(format_summary_table(mean_df, std_df))
+    print(f"Summary saved to {summary_file}")
 
 
 if __name__ == "__main__":
