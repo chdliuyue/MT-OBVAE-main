@@ -56,8 +56,8 @@ def train_random_forest_model(X, y, output_dir, feature_names, random_state: int
 
     # 定义超参数搜索空间
     param_grid = {
-        'n_estimators': [200],
-        'max_depth': [8],
+        'n_estimators': [100, 150, 200],
+        'max_depth': [5, 6, 7, 8],
         'min_samples_split': [4],
         'min_samples_leaf': [2],
         'max_features': ['sqrt']

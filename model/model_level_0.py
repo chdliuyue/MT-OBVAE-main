@@ -105,8 +105,8 @@ def main():
     # 设置输入路径、输出路径等参数
     ratio_name = "highD_ratio_20"
     ap = argparse.ArgumentParser()
-    ap.add_argument("--train", default="../data/" + ratio_name + "/train.csv")
-    ap.add_argument("--test", default="../data/" + ratio_name + "/test.csv")
+    ap.add_argument("--train", default="../data/" + ratio_name + "/train_old.csv")
+    ap.add_argument("--test", default="../data/" + ratio_name + "/test_old.csv")
     ap.add_argument("--out_dir", default="../output/" + ratio_name + "/results_level_0")
     ap.add_argument("--runs", type=int, default=5, help="重复实验次数")
     ap.add_argument(

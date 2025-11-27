@@ -351,8 +351,8 @@ def main():
     ratio_name = "highD_ratio_20"
     ap = argparse.ArgumentParser()
     # 文件路径参数
-    ap.add_argument("--train", default=f"../data/{ratio_name}/train.csv", help="训练数据路径")
-    ap.add_argument("--test", default=f"../data/{ratio_name}/test.csv", help="测试数据路径")
+    ap.add_argument("--train", default=f"../data/{ratio_name}/train_old.csv", help="训练数据路径")
+    ap.add_argument("--test", default=f"../data/{ratio_name}/test_old.csv", help="测试数据路径")
     ap.add_argument("--out_dir", default=f"../output/{ratio_name}/results_mt_obvae", help="输出目录")
     # 训练超参数
     ap.add_argument("--epochs", type=int, default=200, help="训练轮次")
