@@ -364,7 +364,7 @@ def main():
     ap.add_argument("--kl_weight", type=float, default=0.01, help="隐空间KL损失的最终权重")
     ap.add_argument("--anneal_portion", type=float, default=0.5, help="KL退火周期占比")
     ap.add_argument("--density_feature", default=None, help="用于相空间分色的密度特征名")
-    ap.add_argument("--embedding_method", default="tsne", choices=["tsne", "umap", "both"], help="冲突相空间降维方式")
+    ap.add_argument("--embedding_method", default="both", choices=["tsne", "umap", "both"], help="冲突相空间降维方式")
     ap.add_argument("--embedding_perplexity", type=int, default=30, help="t-SNE困惑度/邻域大小")
     ap.add_argument("--uncertainty_indices", default="", help="逗号分隔的样本索引用于不确定性可视化，留空自动选择")
     ap.add_argument("--uncertainty_top_k", type=int, default=5, help="自动选择高风险样本的数量")

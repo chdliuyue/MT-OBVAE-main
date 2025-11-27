@@ -54,8 +54,8 @@ def compute_embeddings(
     latent_df: pd.DataFrame,
     random_state: int = 42,
     perplexity: int = 30,
-    method: str = "tsne",
-) -> tuple[pd.DataFrame, str]:
+    method: str = "both",
+) -> tuple[pd.DataFrame, str, list[str]]:
     mu_cols = [col for col in latent_df.columns if col.startswith("mu_z_")]
     latent_df = latent_df.copy()
     requested = method.lower()
@@ -89,7 +89,7 @@ def compute_embeddings(
     else:
         chosen = available_methods[0]
 
-    return latent_df, chosen
+    return latent_df, chosen, available_methods
 
 
 def _infer_state_column(df: pd.DataFrame) -> Optional[str]:
@@ -257,6 +257,60 @@ def plot_dominant_risk_coloring(
     plt.close()
 
 
+def _task_risk_palette() -> dict[int, str]:
+    return {0: "#1b7837", 1: "#5aae61", 2: "#4393c3", 3: "#b2182b"}
+
+
+def plot_task_risk_grids(
+    df: pd.DataFrame,
+    output_dir: str,
+    available_methods: list[str],
+    prefix: str = "1_",
+) -> None:
+    _ensure_output_dir(output_dir)
+    risk_labels = {0: "No risk", 1: "Low risk", 2: "Medium risk", 3: "High risk"}
+    palette = _task_risk_palette()
+    tasks = [("TTC", "y_ttc"), ("DRAC", "y_drac"), ("PSD", "y_psd")]
+
+    for method in available_methods:
+        coord_cols = _get_embedding_columns(df, method)
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=False, sharey=False)
+
+        for ax, (task_label, target_col) in zip(axes, tasks):
+            if target_col not in df.columns:
+                ax.set_visible(False)
+                continue
+            for risk_value, group in df.groupby(target_col):
+                if pd.isna(risk_value):
+                    continue
+                try:
+                    risk_value = int(risk_value)
+                except (TypeError, ValueError):
+                    continue
+                ax.scatter(
+                    group[coord_cols[0]],
+                    group[coord_cols[1]],
+                    s=18,
+                    alpha=0.72,
+                    label=risk_labels.get(risk_value, str(risk_value)),
+                    color=palette.get(risk_value, "#777777"),
+                )
+
+            ax.set_title(f"{task_label} risk type", fontsize=13)
+            ax.set_xlabel(f"{method.upper()} 1", fontsize=12)
+            ax.set_ylabel(f"{method.upper()} 2", fontsize=12)
+            ax.grid(True, linestyle="--", alpha=0.4)
+            ax.tick_params(labelsize=11)
+            ax.legend(title="Risk type", fontsize=10, title_fontsize=11)
+
+        fig.suptitle(f"Conflict phase space ({method.upper()}) — task-wise risk types", fontsize=15)
+        fig.tight_layout(rect=(0, 0, 1, 0.94))
+        plt.savefig(
+            os.path.join(output_dir, _prefixed_name(prefix, f"phase_space_dominant_risk_{method}.png")), dpi=300
+        )
+        plt.close(fig)
+
+
 def plot_risk_ambiguity_vs_density(
     latent_csv: str, output_dir: str, density_feature: Optional[str] = None, figsize=(7, 5), prefix: str = "2_"
 ) -> None:
@@ -279,18 +333,18 @@ def plot_risk_ambiguity_vs_density(
 
     plt.figure(figsize=figsize)
     plt.scatter(x, y, alpha=0.6, label="Samples", s=18, color="#2E8B57")
-    plt.plot(x_smooth, y_smooth, color="#1D2F6F", label="Quadratic fit (RAI(x))", linewidth=2.5)
+    plt.plot(x_smooth, y_smooth, color="#000000", label="Quadratic fit", linewidth=2)
     if not np.isnan(peak_x):
         plt.axvline(peak_x, color=NATURE_PALETTE[2], linestyle="--", alpha=0.7)
         plt.scatter([peak_x], [peak_y], color=NATURE_PALETTE[4], zorder=5)
-        plt.text(peak_x, peak_y, f"Peak=({peak_x:.2f}, {peak_y:.2f})", fontsize=9)
+        plt.text(peak_x, peak_y, f"Peak=({peak_x:.2f}, {peak_y:.2f})", fontsize=10)
 
-    plt.xlabel(density_feature, fontsize=12)
-    plt.ylabel("Risk Ambiguity Index (RAI)", fontsize=12)
-    plt.title("Risk ambiguity vs traffic density", fontsize=13)
-    plt.legend(fontsize=11)
+    plt.xlabel(density_feature, fontsize=13)
+    plt.ylabel("Risk Ambiguity Index (RAI)", fontsize=13)
+    plt.title("Risk ambiguity vs traffic density", fontsize=14)
+    plt.legend(fontsize=12)
     plt.grid(True, linestyle="--", alpha=0.4)
-    plt.tick_params(labelsize=11)
+    plt.tick_params(labelsize=12)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "risk_ambiguity_density.png")), dpi=300)
     plt.close()
@@ -343,23 +397,23 @@ def plot_risk_ambiguity_feature_relationships(
             ax.plot(
                 x_smooth,
                 poly(x_smooth),
-                color="#1D2F6F",
-                linewidth=2.5,
-                label="Quadratic fit (RAI(x))",
+                color="#000000",
+                linewidth=2,
+                label="Quadratic fit",
             )
         except np.linalg.LinAlgError:
             pass
 
-        ax.set_xlabel(feature, fontsize=11)
-        ax.set_ylabel("Risk Ambiguity", fontsize=11)
+        ax.set_xlabel(feature, fontsize=12)
+        ax.set_ylabel("Risk Ambiguity", fontsize=12)
         ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend(fontsize=9)
-        ax.tick_params(labelsize=10)
+        ax.legend(fontsize=11)
+        ax.tick_params(labelsize=11)
 
     for ax in axes.flatten()[num_features:]:
         ax.axis("off")
 
-    fig.suptitle("Risk ambiguity vs. traffic features", fontsize=15)
+    fig.suptitle("Risk ambiguity vs. traffic features", fontsize=16)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     plt.savefig(os.path.join(output_dir, _prefixed_name(prefix, "risk_ambiguity_features.png")), dpi=300)
     plt.close(fig)
@@ -370,13 +424,15 @@ def generate_phase_space(
     output_dir: str,
     density_feature: Optional[str] = None,
     prefix: str = "2_",
-    embedding_method: str = "tsne",
+    embedding_method: str = "both",
     perplexity: int = 30,
     latent_prefix: Optional[str] = None,
 ) -> pd.DataFrame:
     _ensure_output_dir(output_dir)
     latent_df = pd.read_csv(latent_csv)
-    latent_df, chosen_method = compute_embeddings(latent_df, method=embedding_method, perplexity=perplexity)
+    latent_df, chosen_method, available_methods = compute_embeddings(
+        latent_df, method=embedding_method, perplexity=perplexity
+    )
     coord_cols = _get_embedding_columns(latent_df, chosen_method)
     embedding_label = chosen_method.upper()
     latent_prefix = latent_prefix if latent_prefix is not None else prefix
@@ -384,6 +440,8 @@ def generate_phase_space(
         output_dir, _prefixed_name(latent_prefix, f"latent_space_with_{embedding_label.lower()}.csv")
     )
     latent_df.to_csv(enriched_path, index=False)
+
+    plot_task_risk_grids(latent_df, output_dir, available_methods, prefix="1_")
 
     plot_density_coloring(
         latent_df, output_dir, density_feature=density_feature, prefix=prefix, coord_cols=coord_cols, embedding_label=embedding_label

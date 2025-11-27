@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import List
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 
@@ -40,7 +41,9 @@ class TrainingMonitor:
             return
 
         df = self._to_dataframe()
-        nature_palette = ["#D81B60", "#1E88E5", "#43A047"]
+        recon_color = "#2E8B57"
+        kl_color = "#1E88E5"
+        lambda_color = "#F39C12"
         fig, ax_loss = plt.subplots(figsize=figsize)
 
         ax_loss.plot(
@@ -49,15 +52,15 @@ class TrainingMonitor:
             label="Reconstruction Loss",
             marker="o",
             markersize=4,
-            color=nature_palette[0],
+            color=recon_color,
         )
         ax_loss.plot(
             df["epoch"],
             df["kl_loss"],
-            label="KL Loss",
+            label="Latent Regularization",
             marker="o",
             markersize=4,
-            color=nature_palette[1],
+            color=kl_color,
         )
         ax_loss.set_xlabel("Epoch")
         ax_loss.set_ylabel("Loss")
@@ -69,11 +72,16 @@ class TrainingMonitor:
             df["kl_weight"],
             label=r"$\lambda_{t}$",
             linestyle="--",
-            color=nature_palette[2],
+            color=lambda_color,
         )
         ax_weight.set_ylabel(r"$\lambda_{t}$")
         ax_weight.set_ylim(0, 0.02)
-        ax_weight.set_yticks(ax_loss.get_yticks())
+
+        shared_tick_count = len(ax_loss.get_yticks())
+        ax_loss_ticks = np.linspace(df[["recon_loss", "kl_loss"]].min().min(), df[["recon_loss", "kl_loss"]].max().max(), shared_tick_count)
+        ax_lambda_ticks = np.linspace(0, 0.02, shared_tick_count)
+        ax_loss.set_yticks(ax_loss_ticks)
+        ax_weight.set_yticks(ax_lambda_ticks)
 
         lines_loss, labels_loss = ax_loss.get_legend_handles_labels()
         lines_weight, labels_weight = ax_weight.get_legend_handles_labels()
