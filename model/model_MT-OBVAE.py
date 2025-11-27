@@ -355,7 +355,7 @@ def main():
     ap.add_argument("--test", default=f"../data/{ratio_name}/test.csv", help="测试数据路径")
     ap.add_argument("--out_dir", default=f"../output/{ratio_name}/results_mt_obvae", help="输出目录")
     # 训练超参数
-    ap.add_argument("--epochs", type=int, default=2, help="训练轮次")
+    ap.add_argument("--epochs", type=int, default=200, help="训练轮次")
     ap.add_argument("--batch_size", type=int, default=128, help="批处理大小")
     ap.add_argument("--lr", type=float, default=1e-3, help="学习率")
     # 模型结构超参数
@@ -371,7 +371,7 @@ def main():
     ap.add_argument("--uncertainty_indices", default="", help="逗号分隔的样本索引用于不确定性可视化，留空自动选择")
     ap.add_argument("--uncertainty_top_k", type=int, default=5, help="自动选择高风险样本的数量")
     ap.add_argument("--uncertainty_mc_samples", type=int, default=100, help="不确定性可视化时的MC采样次数")
-    ap.add_argument("--eval_mc_samples", type=int, default=50, help="评估时的蒙特卡洛采样次数")
+    ap.add_argument("--eval_mc_samples", type=int, default=100, help="评估时的蒙特卡洛采样次数")
     ap.add_argument("--eval_runs", type=int, default=3, help="重复评估次数以统计均值和标准差")
     args = ap.parse_args()
 
@@ -421,8 +421,6 @@ def main():
     latent_space_df_path = os.path.join(args.out_dir, "1_latent_space_data.csv")
     latent_space_df.to_csv(latent_space_df_path, index=False)
     print(f"\n接口1&2: 隐空间数据已保存至 {latent_space_df_path}")
-    print("隐空间数据预览:")
-    print(latent_space_df.head())
 
     # 接口 1&2：生成冲突相空间可视化与风险模糊度分析
     generate_phase_space(

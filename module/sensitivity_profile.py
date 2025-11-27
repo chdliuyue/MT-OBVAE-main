@@ -96,7 +96,6 @@ def visualize_decoder_sensitivities(
             latent_df, table, output_path=influence_json, feature_limit=feature_limit, top_k=top_k
         )
         print(f"特征-隐空间影响关系已保存至 {influence_json}:")
-        print(json.dumps(summary, indent=2, ensure_ascii=False))
     return table
 
 
