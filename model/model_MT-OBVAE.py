@@ -353,7 +353,7 @@ def main():
     ap.add_argument("--test", default=f"../data/{ratio_name}/test.csv", help="测试数据路径")
     ap.add_argument("--out_dir", default=f"../output/{ratio_name}/results_mt_obvae", help="输出目录")
     # 训练超参数
-    ap.add_argument("--epochs", type=int, default=200, help="训练轮次")
+    ap.add_argument("--epochs", type=int, default=2, help="训练轮次")
     ap.add_argument("--batch_size", type=int, default=128, help="批处理大小")
     ap.add_argument("--lr", type=float, default=1e-3, help="学习率")
     # 模型结构超参数
@@ -422,7 +422,7 @@ def main():
     print("隐空间数据预览:")
     print(latent_space_df.head())
 
-    # 生成冲突相空间可视化与风险模糊度分析
+    # 接口 1&2：生成冲突相空间可视化与风险模糊度分析
     generate_phase_space(
         latent_space_df_path,
         args.out_dir,

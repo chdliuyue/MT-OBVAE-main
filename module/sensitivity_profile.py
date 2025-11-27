@@ -44,22 +44,6 @@ def build_sensitivity_table(sensitivities: Dict[str, np.ndarray], sort_dimension
     return df
 
 
-def plot_heatmap(table: pd.DataFrame, output_dir: str, figsize=(7, 5), prefix: str = "3_") -> None:
-    os.makedirs(output_dir, exist_ok=True)
-    cmap = LinearSegmentedColormap.from_list("beta_nature", [NATURE_PALETTE[1], NATURE_PALETTE[2], NATURE_PALETTE[0]])
-    plt.figure(figsize=figsize)
-    plt.imshow(table.values, aspect="auto", cmap=cmap)
-    plt.colorbar(label="Normalized |beta|")
-    plt.xticks(ticks=range(table.shape[1]), labels=table.columns)
-    plt.yticks(ticks=range(table.shape[0]), labels=table.index)
-    plt.xlabel("Task")
-    plt.ylabel("Latent dimension")
-    plt.title("Decoder sensitivity profile")
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f"{prefix}decoder_sensitivity_heatmap.png"), dpi=300)
-    plt.close()
-
-
 def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4), prefix: str = "3_") -> None:
     os.makedirs(output_dir, exist_ok=True)
     num_tasks = table.shape[1]
@@ -72,7 +56,7 @@ def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4), prefix:
         values.plot(kind="bar", ax=ax, color=palette[: len(values)])
         ax.set_title(task)
         ax.set_xlabel("Latent dim")
-        ax.set_ylabel("Normalized |beta|")
+        ax.set_ylabel(r"Normalized |$\beta$|")
         ax.grid(True, linestyle="--", alpha=0.5)
         for patch in ax.patches:
             ax.text(
@@ -81,7 +65,7 @@ def plot_task_bars(table: pd.DataFrame, output_dir: str, figsize=(9, 4), prefix:
                 f"{patch.get_height():.2f}",
                 ha="center",
                 va="bottom",
-                fontsize=8,
+                fontsize=10,
                 rotation=0,
             )
     plt.tight_layout()
@@ -104,7 +88,6 @@ def visualize_decoder_sensitivities(
     csv_path = os.path.join(output_dir, f"{prefix}decoder_sensitivity_normalized.csv")
     table.to_csv(csv_path)
 
-    plot_heatmap(table, output_dir, prefix=prefix)
     plot_task_bars(table, output_dir, prefix=prefix)
 
     if latent_df is not None:

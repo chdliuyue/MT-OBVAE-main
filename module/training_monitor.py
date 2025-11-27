@@ -50,8 +50,8 @@ class TrainingMonitor:
             df["epoch"],
             df["recon_loss"],
             label="Reconstruction Loss",
-            marker="o",
-            markersize=4,
+            marker="x",
+            markersize=4.5,
             color=recon_color,
         )
         ax_loss.plot(
@@ -62,8 +62,8 @@ class TrainingMonitor:
             markersize=4,
             color=kl_color,
         )
-        ax_loss.set_xlabel("Epoch")
-        ax_loss.set_ylabel("Loss")
+        ax_loss.set_xlabel("Epoch", fontsize=16)
+        ax_loss.set_ylabel("Loss", fontsize=16)
         ax_loss.set_xlim(0, 200)
 
         ax_weight = ax_loss.twinx()
@@ -74,20 +74,22 @@ class TrainingMonitor:
             linestyle="--",
             color=lambda_color,
         )
-        ax_weight.set_ylabel(r"$\lambda_{t}$")
+        ax_weight.set_ylabel(r"$\lambda_{t}$", fontsize=16)
         ax_weight.set_ylim(0, 0.02)
 
-        shared_tick_count = len(ax_loss.get_yticks())
-        ax_loss_ticks = np.linspace(df[["recon_loss", "kl_loss"]].min().min(), df[["recon_loss", "kl_loss"]].max().max(), shared_tick_count)
-        ax_lambda_ticks = np.linspace(0, 0.02, shared_tick_count)
+        ax_loss_ticks = np.linspace(0, 28, 8)
+        ax_lambda_ticks = np.linspace(0, 0.02, 5)
         ax_loss.set_yticks(ax_loss_ticks)
         ax_weight.set_yticks(ax_lambda_ticks)
+        ax_loss.tick_params(axis='x', labelsize=16)
+        ax_loss.tick_params(axis='y', labelsize=16)
+        ax_weight.tick_params(axis='y', labelsize=16)
 
         lines_loss, labels_loss = ax_loss.get_legend_handles_labels()
         lines_weight, labels_weight = ax_weight.get_legend_handles_labels()
-        ax_loss.legend(lines_loss + lines_weight, labels_loss + labels_weight, loc="best")
+        ax_loss.legend(lines_loss + lines_weight, labels_loss + labels_weight, loc="best", fontsize=16)
 
-        ax_loss.set_title("MT-OBVAE Training Progress")
+        # ax_loss.set_title("MT-OBVAE Training Progress")
         ax_loss.grid(True, linestyle="--", alpha=0.5)
         fig.tight_layout()
 
