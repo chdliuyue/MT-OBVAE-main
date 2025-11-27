@@ -37,46 +37,6 @@ def extract_latent_space(model, X_data, y_data, feature_names, batch_size=256):
     return df
 
 
-def predict_with_uncertainty(model, x_sample, num_mc_samples=100):
-    """接口 4: 对单个样本进行预测，并分解不确定性"""
-    print("接口 4: 正在对单个样本进行不确定性分解...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.eval()
-    task_names = ["ttc", "drac", "psd"]
-    x_tensor = torch.tensor(x_sample).unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        mu_z, log_var_z = model.encoder(x_tensor)
-        aleatoric_index = torch.sum(torch.exp(log_var_z)).item()
-
-    all_prob_preds = {task: [] for task in task_names}
-    with torch.no_grad():
-        for _ in range(num_mc_samples):
-            outputs = model(x_tensor)
-            z_sample = outputs["z_sample"]
-            for task in task_names:
-                beta, thresholds = outputs[f"params_{task}"]
-                latent_pred = torch.bmm(z_sample.unsqueeze(1), beta).squeeze(-1).squeeze(-1)
-                padded_thresholds = F.pad(thresholds, (1, 1), "constant", torch.inf)
-                padded_thresholds[:, 0] = -torch.inf
-                cdf_vals = torch.distributions.Normal(0, 1).cdf(padded_thresholds - latent_pred.unsqueeze(1))
-                probs = cdf_vals[:, 1:] - cdf_vals[:, :-1]
-                all_prob_preds[task].append(probs.cpu().numpy())
-
-    predictive_mean = {}
-    epistemic_uncertainty = {}
-    for task in task_names:
-        preds_array = np.concatenate(all_prob_preds[task], axis=0)
-        predictive_mean[task] = preds_array.mean(axis=0)
-        epistemic_uncertainty[task] = np.var(preds_array, axis=0).sum()
-
-    return {
-        "平均预测概率": predictive_mean,
-        "认知不确定性(方差和)": epistemic_uncertainty,
-        "偶然不确定性指数(风险模糊度)": aleatoric_index,
-    }
-
-
 def extract_decoder_sensitivities(model):
     """接口 3: 提取解码器敏感性（beta系数网络的权重均值）"""
     print("接口 3: 正在提取解码器敏性剖面...")

@@ -16,13 +16,15 @@ from blitz.utils import variational_estimator
 from module.interfaces import (
     extract_decoder_sensitivities,
     extract_latent_space,
-    predict_with_uncertainty,
 )
 from module.metrics import evaluate_multitask_predictions, format_results_table
 from module.phase_space import generate_phase_space
 from module.sensitivity_profile import visualize_decoder_sensitivities
 from module.training_monitor import TrainingMonitor
-from module.uncertainty_viz import rank_uncertainty_extremes, visualize_uncertainty_cases
+from module.uncertainty_viz import (
+    analyze_uncertainty_extremes,
+    visualize_uncertainty_cases,
+)
 
 # --- 项目路径设置 ---
 # 假设您的代码文件在 model 文件夹下，而 module 文件夹与 model 在同一级目录
@@ -449,50 +451,53 @@ def main():
         print(f"--- 任务: {task}, 权重形状: {weights.shape} ---")
 
     # 接口 4: 认知不确定性与可靠性感知预警
-    index_list = [int(idx.strip()) for idx in args.uncertainty_indices.split(',') if idx.strip().isdigit()]
-    index_list = [idx for idx in index_list if 0 <= idx < len(X_test)]
     uncertainty_metric = "mutual_information"
-    if not index_list:
-        high_uncertainty, low_uncertainty, ranking_df = rank_uncertainty_extremes(
-            model,
-            X_test,
-            num_mc_samples=args.uncertainty_mc_samples,
-            top_k=args.uncertainty_top_k,
-            metric=uncertainty_metric,
-            output_dir=args.out_dir,
-        )
-        index_list = high_uncertainty + [idx for idx in low_uncertainty if idx not in high_uncertainty]
+    high_uncertainty, low_uncertainty, ranking_df, comparison_df = analyze_uncertainty_extremes(
+        model,
+        X_train,
+        y_train,
+        num_mc_samples=args.uncertainty_mc_samples,
+        top_k=args.uncertainty_top_k,
+        metric=uncertainty_metric,
+        batch_size=args.batch_size,
+        output_dir=args.out_dir,
+    )
 
-    if index_list:
-        uncertainty_results = visualize_uncertainty_cases(
-            model,
-            X_test,
-            index_list,
-            args.out_dir,
-            num_mc_samples=args.uncertainty_mc_samples,
-        )
-        uncertainty_json = os.path.join(args.out_dir, "4_uncertainty_cases.json")
-        with open(uncertainty_json, "w", encoding="utf-8") as f:
-            json.dump(uncertainty_results, f, indent=2, ensure_ascii=False)
+    comparison_path = os.path.join(args.out_dir, f"4_uncertainty_{uncertainty_metric}_comparison.csv")
+    comparison_df.to_csv(comparison_path, index=False)
+    print(f"\n接口4: 训练集不确定性极值对比表已保存至 {comparison_path}")
 
-        flattened_rows = []
-        for item in uncertainty_results:
-            for task, stats in item["summaries"].items():
-                row = {
-                    "sample_index": item["sample_index"],
-                    "aleatoric_index": item.get("aleatoric_index"),
-                    "task": task,
-                    "epistemic_variance": stats["epistemic_variance"],
-                    "mutual_information": stats["mutual_information"],
-                }
-                for i, prob in enumerate(stats["predictive_mean"]):
-                    row[f"predictive_mean_class{i}"] = prob
-                flattened_rows.append(row)
+    manual_indices = [int(idx.strip()) for idx in args.uncertainty_indices.split(',') if idx.strip().isdigit()]
+    manual_indices = [idx for idx in manual_indices if 0 <= idx < len(X_train)]
+    index_list = manual_indices or high_uncertainty + [idx for idx in low_uncertainty if idx not in high_uncertainty]
 
-        pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "4_uncertainty_cases.csv"), index=False)
-        print(f"\n接口4: 不确定性案例分析结果已保存至 {uncertainty_json}")
-    else:
-        print("未找到满足条件的高风险样本，跳过不确定性可视化。")
+    uncertainty_results = visualize_uncertainty_cases(
+        model,
+        X_train,
+        index_list,
+        args.out_dir,
+        num_mc_samples=args.uncertainty_mc_samples,
+    )
+    uncertainty_json = os.path.join(args.out_dir, "4_uncertainty_cases.json")
+    with open(uncertainty_json, "w", encoding="utf-8") as f:
+        json.dump(uncertainty_results, f, indent=2, ensure_ascii=False)
+
+    flattened_rows = []
+    for item in uncertainty_results:
+        for task, stats in item["summaries"].items():
+            row = {
+                "sample_index": item["sample_index"],
+                "aleatoric_index": item.get("aleatoric_index"),
+                "task": task,
+                "epistemic_variance": stats["epistemic_variance"],
+                "mutual_information": stats["mutual_information"],
+            }
+            for i, prob in enumerate(stats["predictive_mean"]):
+                row[f"predictive_mean_class{i}"] = prob
+            flattened_rows.append(row)
+
+    pd.DataFrame(flattened_rows).to_csv(os.path.join(args.out_dir, "4_uncertainty_cases.csv"), index=False)
+    print(f"\n接口4: 不确定性案例分析结果已保存至 {uncertainty_json}")
 
 
 if __name__ == "__main__":

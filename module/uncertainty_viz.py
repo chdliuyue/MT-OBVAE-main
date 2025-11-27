@@ -141,39 +141,99 @@ def visualize_uncertainty_cases(
     return results
 
 
-def rank_uncertainty_extremes(
+def _prepare_uncertainty_records(
     model: torch.nn.Module,
     X_data: np.ndarray,
-    num_mc_samples: int = 100,
-    top_k: int = 5,
-    metric: str = "mutual_information",
-    batch_size: int = 128,
-    output_dir: str | None = None,
-) -> Tuple[List[int], List[int], pd.DataFrame]:
+    y_true: np.ndarray | None,
+    num_mc_samples: int,
+    metric: str,
+    batch_size: int,
+) -> List[Dict[str, Any]]:
+    if metric not in {"mutual_information", "epistemic_variance"}:
+        raise ValueError("metric 必须是 'mutual_information' 或 'epistemic_variance'")
+
     device = _get_device(model)
     tensor_data = torch.tensor(X_data, dtype=torch.float32)
-    records = []
+    label_tensor = torch.tensor(y_true) if y_true is not None else None
+    records: List[Dict[str, Any]] = []
 
     for start in range(0, len(tensor_data), batch_size):
         batch = tensor_data[start : start + batch_size].to(device)
         prob_samples = mc_sample_probabilities(model, batch, num_mc_samples=num_mc_samples)
         summaries = summarize_uncertainty(prob_samples)
-        if metric not in {"mutual_information", "epistemic_variance"}:
-            raise ValueError("metric 必须是 'mutual_information' 或 'epistemic_variance'")
+
+        with torch.no_grad():
+            _, log_var_z = model.encoder(batch)
+            aleatoric_scores = torch.sum(torch.exp(log_var_z), dim=1).cpu().numpy()
 
         stacked_metric = np.stack([summaries[task][metric] for task in summaries], axis=1)
         averaged_metric = stacked_metric.mean(axis=1)
 
-        for offset, score in enumerate(averaged_metric):
-            records.append({"sample_index": start + offset, metric: float(score)})
+        preds = {
+            task: summaries[task]["predictive_mean"].argmax(axis=1)
+            for task in summaries
+        }
 
-    ranking_df = pd.DataFrame(records)
-    ranking_df = ranking_df.sort_values(metric, ascending=False).reset_index(drop=True)
+        for offset in range(len(batch)):
+            row: Dict[str, Any] = {
+                "sample_index": start + offset,
+                metric: float(averaged_metric[offset]),
+                "aleatoric_index": float(aleatoric_scores[offset]),
+                "ttc_pred": int(preds["ttc"][offset]),
+                "drac_pred": int(preds["drac"][offset]),
+                "psd_pred": int(preds["psd"][offset]),
+                "ttc_metric": float(summaries["ttc"][metric][offset]),
+                "drac_metric": float(summaries["drac"][metric][offset]),
+                "psd_metric": float(summaries["psd"][metric][offset]),
+            }
+
+            if label_tensor is not None:
+                row.update(
+                    {
+                        "ttc_true": int(label_tensor[start + offset, 0].item()),
+                        "drac_true": int(label_tensor[start + offset, 1].item()),
+                        "psd_true": int(label_tensor[start + offset, 2].item()),
+                    }
+                )
+
+            records.append(row)
+
+    return records
+
+
+def analyze_uncertainty_extremes(
+    model: torch.nn.Module,
+    X_data: np.ndarray,
+    y_true: np.ndarray | None = None,
+    num_mc_samples: int = 100,
+    top_k: int = 5,
+    metric: str = "mutual_information",
+    batch_size: int = 128,
+    output_dir: str | None = None,
+) -> Tuple[List[int], List[int], pd.DataFrame, pd.DataFrame]:
+    records = _prepare_uncertainty_records(
+        model=model,
+        X_data=X_data,
+        y_true=y_true,
+        num_mc_samples=num_mc_samples,
+        metric=metric,
+        batch_size=batch_size,
+    )
+
+    ranking_df = pd.DataFrame(records).sort_values(metric, ascending=False).reset_index(drop=True)
+
+    high = ranking_df.head(top_k)["sample_index"].tolist()
+    low = ranking_df.tail(top_k)["sample_index"].tolist()
+
+    comparison_df = pd.concat(
+        [ranking_df.head(top_k), ranking_df.tail(top_k)], ignore_index=True
+    )
 
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
         ranking_df.to_csv(os.path.join(output_dir, f"4_uncertainty_{metric}_ranking.csv"), index=False)
+        comparison_df.to_csv(
+            os.path.join(output_dir, f"4_uncertainty_{metric}_comparison.csv"), index=False
+        )
 
-    high = ranking_df.head(top_k)["sample_index"].tolist()
-    low = ranking_df.tail(top_k)["sample_index"].tolist()
-    return high, low, ranking_df
+    return high, low, ranking_df, comparison_df
