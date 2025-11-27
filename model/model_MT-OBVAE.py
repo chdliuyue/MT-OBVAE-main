@@ -372,7 +372,7 @@ def main():
     ap.add_argument("--uncertainty_top_k", type=int, default=5, help="自动选择高风险样本的数量")
     ap.add_argument("--uncertainty_mc_samples", type=int, default=100, help="不确定性可视化时的MC采样次数")
     ap.add_argument("--eval_mc_samples", type=int, default=100, help="评估时的蒙特卡洛采样次数")
-    ap.add_argument("--eval_runs", type=int, default=3, help="重复评估次数以统计均值和标准差")
+    ap.add_argument("--eval_runs", type=int, default=5, help="重复评估次数以统计均值和标准差")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
